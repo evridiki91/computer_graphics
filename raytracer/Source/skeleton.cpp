@@ -1,6 +1,7 @@
 #include <iostream>
 #include <glm/glm.hpp>
 #include <SDL.h>
+#include "SDL.h"
 #include "SDLauxiliary.h"
 #include "TestModelH.h"
 #include <stdint.h>
@@ -11,22 +12,27 @@ using glm::mat3;
 using glm::vec4;
 using glm::mat4;
 
+struct Camera {
+  vec4 position;
+};
+
 struct Intersection {
   vec4 position;
   float distance;
   int triangleIndex;
 };
 
-#define SCREEN_WIDTH 640
-#define SCREEN_HEIGHT 512
+#define SCREEN_WIDTH 256
+#define SCREEN_HEIGHT 320
 #define FULLSCREEN_MODE false
 #define FOCAL_LENGTH SCREEN_HEIGHT/2
+#define SENSITIVITY 0.1
 
 /* ----------------------------------------------------------------------------*/
 /* FUNCTIONS                                                                   */
 
-void Update();
-void Draw(screen* screen, std::vector<Triangle> &triangles,Intersection &closestIntersection);
+void Update(Camera &camera);
+void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Intersection &closestIntersection);
 bool ClosestIntersection(vec4 start,vec4 dir, const vector<Triangle>& triangles,
                          Intersection& closestIntersection );
 
@@ -36,13 +42,15 @@ int main( int argc, char* argv[] )
 
   screen *screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN_MODE );
   std::vector<Triangle> triangles;
+  Camera camera;
   Intersection closestIntersection;
   //Initialize triangles
   LoadTestModel(triangles);
+  camera.position = vec4(0,0,-2,1);
 
   while( NoQuitMessageSDL() ){
-      Update();
-      Draw(screen,triangles,closestIntersection);
+      Update(camera);
+      Draw(screen,camera,triangles,closestIntersection);
       SDL_Renderframe(screen);
     }
 
@@ -53,16 +61,15 @@ int main( int argc, char* argv[] )
 }
 
 /*Place your drawing here*/
-void Draw(screen* screen, std::vector<Triangle> &triangles,Intersection &closestIntersection){
+void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Intersection &closestIntersection){
   /* Clear buffer */
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
-  vec4 cameraPos( 0, 0, -2, -1);
-  vec4 d;
+
   vec3 black(0.0,0.0,0.0);
   for(int x = 0; x < SCREEN_WIDTH; x++){
     for(int y = 0; y < SCREEN_HEIGHT; y++){
-      d = vec4(x - (SCREEN_WIDTH/2), y - (SCREEN_HEIGHT/2), FOCAL_LENGTH,1);
-      bool intersection = ClosestIntersection(cameraPos,d,triangles,closestIntersection);
+    vec4 d(x - (SCREEN_WIDTH/2), y - (SCREEN_HEIGHT/2), FOCAL_LENGTH,1);
+      bool intersection = ClosestIntersection(camera.position,d,triangles,closestIntersection);
       //printf("intersection is %s",intersection);
       if (intersection==true) {
         //printf("Intersection is true I'm in");
@@ -73,8 +80,11 @@ void Draw(screen* screen, std::vector<Triangle> &triangles,Intersection &closest
   }
 }
 
+
+
+
 /*Place updates of parameters here*/
-void Update()
+void Update(Camera &camera)
 {
   static int t = SDL_GetTicks();
   /* Compute frame time */
@@ -84,6 +94,20 @@ void Update()
   /*Good idea to remove this*/
   std::cout << "Render time: " << dt << " ms." << std::endl;
   /* Update variables*/
+  const uint8_t* keystate = SDL_GetKeyboardState(NULL);
+  if(keystate[SDL_SCANCODE_UP]){
+    camera.position.z += SENSITIVITY;
+  }
+  if(keystate[SDL_SCANCODE_DOWN]){
+    camera.position.z -= SENSITIVITY;
+  }
+  if(keystate[SDL_SCANCODE_LEFT]){
+    camera.position.x -= SENSITIVITY;
+  }
+  if(keystate[SDL_SCANCODE_RIGHT]){
+    camera.position.x += SENSITIVITY;
+  }
+
 }
 
 /*
@@ -95,6 +119,7 @@ bool ClosestIntersection(vec4 start,vec4 dir, const vector<Triangle>& triangles,
                          Intersection& closestIntersection ){
   bool flag = false;
   mat3 A;
+  //mat3 M;
   for (size_t i = 0; i < triangles.size(); i++){
 
     vec4 v0 = triangles[i].v0;
@@ -106,6 +131,8 @@ bool ClosestIntersection(vec4 start,vec4 dir, const vector<Triangle>& triangles,
     vec3 b = vec3(start-v0);
 
     A = mat3( -vec3(dir), e1, e2 );
+    //M[0] = b;
+    //vec3 x = (1/glm::det(A)*M)*b;
     vec3 x = glm::inverse( A ) * b;
     //x = [t u v]
     float t = x.x;
