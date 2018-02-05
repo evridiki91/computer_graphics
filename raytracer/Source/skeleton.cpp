@@ -14,6 +14,8 @@ using glm::mat4;
 
 struct Camera {
   vec4 position;
+  mat4 R; //rotation
+  float yaw; //angle for rotating around y-axis
 };
 
 struct Intersection {
@@ -28,6 +30,9 @@ struct Intersection {
 #define FOCAL_LENGTH SCREEN_HEIGHT/2
 #define SENSITIVITY 0.1
 
+
+
+
 /* ----------------------------------------------------------------------------*/
 /* FUNCTIONS                                                                   */
 
@@ -39,7 +44,7 @@ bool ClosestIntersection(vec4 start,vec4 dir, const vector<Triangle>& triangles,
 
 int main( int argc, char* argv[] )
 {
-
+  // R = [cost 0 sint, 0 1 0, -sint 0 cost ]
   screen *screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN_MODE );
   std::vector<Triangle> triangles;
   Camera camera;
@@ -80,8 +85,11 @@ void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Inters
   }
 }
 
-
-
+void rotation_around(Camera& camera, int dir){
+  camera.yaw += dir*SENSITIVITY;
+  camera.position.z = camera.position.z*(cos(camera.yaw) - camera.position.x*sin(camera.yaw));
+  camera.position.x = camera.position.z*(sin(camera.yaw) + camera.position.x*cos(camera.yaw));
+}
 
 /*Place updates of parameters here*/
 void Update(Camera &camera)
@@ -102,11 +110,12 @@ void Update(Camera &camera)
     camera.position.z -= SENSITIVITY;
   }
   if(keystate[SDL_SCANCODE_LEFT]){
-    camera.position.x -= SENSITIVITY;
+    // camera.position.x -= SENSITIVITY; //Camera moves to the left
+    rotation_around(camera,1);
   }
   if(keystate[SDL_SCANCODE_RIGHT]){
-    camera.position.x += SENSITIVITY;
-  }
+    // camera.position.x += SENSITIVITY; //Camera moves to the right
+    rotation_around(camera,-1);  }
 
 }
 
@@ -119,7 +128,7 @@ bool ClosestIntersection(vec4 start,vec4 dir, const vector<Triangle>& triangles,
                          Intersection& closestIntersection ){
   bool flag = false;
   mat3 A;
-  //mat3 M;
+  // mat3 M;
   for (size_t i = 0; i < triangles.size(); i++){
 
     vec4 v0 = triangles[i].v0;
@@ -131,8 +140,8 @@ bool ClosestIntersection(vec4 start,vec4 dir, const vector<Triangle>& triangles,
     vec3 b = vec3(start-v0);
 
     A = mat3( -vec3(dir), e1, e2 );
-    //M[0] = b;
-    //vec3 x = (1/glm::det(A)*M)*b;
+    // M[0] = b;
+    // vec3 x = ((1/glm::determinant(A))*M)*b;
     vec3 x = glm::inverse( A ) * b;
     //x = [t u v]
     float t = x.x;
