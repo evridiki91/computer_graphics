@@ -30,6 +30,7 @@ struct Intersection {
 vec4 lightPos( 0, -0.5, -0.7, 1.0 );
 vec3 lightColor = 14.f * vec3( 1, 1, 1 );
 vector<Triangle> triangles;
+vec3 indirectLight = 0.5f*vec3( 1, 1, 1 );
 
 #define SCREEN_WIDTH 256
 #define SCREEN_HEIGHT 320
@@ -39,6 +40,8 @@ vector<Triangle> triangles;
 #define ROTATION_SENSITIVITY 1f
 #define LIGHT_SENSITIVITY 0.2f
 #define PI_F 3.14159265358979f
+vec3 black(0.0,0.0,0.0);
+
 
 
 
@@ -86,8 +89,14 @@ vec3 DirectLight( const Intersection& i){
   vec4 n_hat = (triangle.normal);
   vec4 r_hat = glm::normalize(lightPos - i.position);
   float dotProduct = glm::dot(r_hat,n_hat);
-
   vec3 D = (triangle.color*lightColor * max(dotProduct,(0.0f)))/(4*PI_F*r*r);
+  Intersection shadowIntersection;
+	vec4 shadowDirection = -r_hat;
+  Intersection shadows_intersection;
+  bool inter = ClosestIntersection(lightPos,shadowDirection,triangles,shadows_intersection);
+  if (inter && (shadows_intersection.distance < r - 0.0001f) ){
+    return black;
+  }
   return D;
 }
 
@@ -96,8 +105,6 @@ vec3 DirectLight( const Intersection& i){
 void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Intersection &closestIntersection){
   /* Clear buffer */
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
-
-  vec3 black(0.0,0.0,0.0);
   for(int x = 0; x < SCREEN_WIDTH; x++){
     for(int y = 0; y < SCREEN_HEIGHT; y++){
     vec4 d(x - (SCREEN_WIDTH/2), y - (SCREEN_HEIGHT/2), FOCAL_LENGTH,1);
@@ -166,10 +173,7 @@ void Update(Camera &camera)
   else if(keystate[SDL_SCANCODE_D]){
       lightPos += right*LIGHT_SENSITIVITY;
   }
-
-
 }
-
 
 bool ClosestIntersection(vec4 start,vec4 dir, const vector<Triangle>& triangles,
                          Intersection& closestIntersection ){
@@ -199,19 +203,10 @@ bool ClosestIntersection(vec4 start,vec4 dir, const vector<Triangle>& triangles,
 
     //Otan valume = fevgun oi mavres grammes
     if(u >= 0 && v >= 0 && (u + v) <= 1 && t >= 0 && t < closestIntersection.distance){
-      // if (flag == false){
-        flag = true;
+        if (flag == false) flag = true;
         closestIntersection.triangleIndex = i;
         closestIntersection.distance = t;
         closestIntersection.position = start + dir*t;
-      // }
-      // else {
-        // if (t < closestIntersection.distance){
-          // closestIntersection.triangleIndex = i;
-          // closestIntersection.distance = t;
-          // closestIntersection.position = vec4(t,u,v,1);
-        // }
-      // }
     }
   }
   return flag;
