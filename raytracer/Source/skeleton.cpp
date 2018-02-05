@@ -174,6 +174,7 @@ void Update(Camera &camera)
 bool ClosestIntersection(vec4 start,vec4 dir, const vector<Triangle>& triangles,
                          Intersection& closestIntersection ){
   bool flag = false;
+  closestIntersection.distance = std::numeric_limits<float>::max();
   mat3 A;
   // mat3 M;
   for (size_t i = 0; i < triangles.size(); i++){
@@ -193,14 +194,24 @@ bool ClosestIntersection(vec4 start,vec4 dir, const vector<Triangle>& triangles,
     //x = [t u v]
     float t = x.x;
     float u = x.y;
-      }
-      else {
-        if (t < closestIntersection.distance){
-          closestIntersection.triangleIndex = i;
-          closestIntersection.distance = t;
-          closestIntersection.position = vec4(t,u,v,1);
-        }
-      }
+    float v = x.z;
+    //printf("t : %f, u : %f, v : %f",v);
+
+    //Otan valume = fevgun oi mavres grammes
+    if(u >= 0 && v >= 0 && (u + v) <= 1 && t >= 0 && t < closestIntersection.distance){
+      // if (flag == false){
+        flag = true;
+        closestIntersection.triangleIndex = i;
+        closestIntersection.distance = t;
+        closestIntersection.position = start + dir*t;
+      // }
+      // else {
+        // if (t < closestIntersection.distance){
+          // closestIntersection.triangleIndex = i;
+          // closestIntersection.distance = t;
+          // closestIntersection.position = vec4(t,u,v,1);
+        // }
+      // }
     }
   }
   return flag;
