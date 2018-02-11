@@ -89,7 +89,7 @@ vec3 DirectLight( const Intersection& i){
   vec4 n_hat = (triangle.normal);
   vec4 r_hat = glm::normalize(lightPos - i.position);
   float dotProduct = glm::dot(r_hat,n_hat);
-  vec3 D = (triangle.color*lightColor * max(dotProduct,(0.0f)))/(4*PI_F*r*r);
+  vec3 D = (lightColor * max(dotProduct,(0.0f)))/(4*PI_F*r*r);
   Intersection shadowIntersection;
 	vec4 shadowDirection = -r_hat;
   Intersection shadows_intersection;
@@ -113,7 +113,8 @@ void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Inters
       //printf("intersection is %s",intersection);
       if (intersection==true) {
         //printf("Intersection is true I'm in");
-        vec3 light = DirectLight(closestIntersection);
+
+        vec3 light = triangles[closestIntersection.triangleIndex].color*(DirectLight(closestIntersection) + indirectLight);
         PutPixelSDL(screen, x, y, light);
         // PutPixelSDL(screen, x, y, triangles[closestIntersection.triangleIndex].color);
       }
