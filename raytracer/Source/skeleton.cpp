@@ -19,6 +19,8 @@ struct Camera {
   vec4 position;
   mat4 R; //rotation
   float yaw; //angle for rotating around y-axis
+  float pitch;
+  float roll;
 };
 
 struct Intersection {
@@ -43,9 +45,6 @@ vec3 indirectLight = 0.5f*vec3( 1, 1, 1 );
 vec3 black(0.0,0.0,0.0);
 
 
-
-
-
 /* ----------------------------------------------------------------------------*/
 /* FUNCTIONS                                                                   */
 
@@ -58,13 +57,30 @@ void initialize_camera(Camera &camera);
 
 int main( int argc, char* argv[] )
 {
-  // R = [cost 0 sint, 0 1 0, -sint 0 cost ]
   screen *screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN_MODE );
   Camera camera;
   initialize_camera(camera);
   Intersection closestIntersection;
   //Initialize triangles
-  LoadTestModel(triangles);
+  if (argc <= 1) {
+    printf("Enter model to be loaded\n");
+    return 1;
+  }
+
+  else {
+    if (std::string(argv[1]) == "test"){
+      LoadTestModel(triangles);
+    }
+    else {
+      if (!loadObj(std::string(argv[1]),triangles)) {
+        printf("Can't load file\n");
+        return 1;
+      }
+      std::cout << "Succesfully loaded model" << '\n';
+      std::cout << "Number of triangles" << triangles.size() << '\n';
+
+    }
+  }
 
   while( NoQuitMessageSDL() ){
       Update(camera);
@@ -79,8 +95,10 @@ int main( int argc, char* argv[] )
 }
 
 void initialize_camera(Camera &camera){
-  camera.position = vec4(0,0,-2,1);
+  camera.position = vec4(0,0.1,-0.3,0);
   camera.yaw = 0;
+  camera.pitch = 0;
+  camera.roll = 0;
 }
 
 vec3 DirectLight( const Intersection& i){
@@ -113,10 +131,9 @@ void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Inters
       //printf("intersection is %s",intersection);
       if (intersection==true) {
         //printf("Intersection is true I'm in");
-
         vec3 light = triangles[closestIntersection.triangleIndex].color*(DirectLight(closestIntersection) + indirectLight);
+
         PutPixelSDL(screen, x, y, light);
-        // PutPixelSDL(screen, x, y, triangles[closestIntersection.triangleIndex].color);
       }
       else PutPixelSDL(screen, x, y, black);
     }
@@ -128,6 +145,25 @@ void rotation_aroundY(Camera& camera, int dir){
   vec4 v1(cos(camera.yaw), 0, sin(camera.yaw),0);
   vec4 v2(0,1,0,0);
   vec4 v3(-sin(camera.yaw), 0, cos(camera.yaw),0);
+  vec4 v4(0,0,0,1);
+  camera.R = mat4(v1,v2,v3,v4);
+}
+//roll
+void rotation_aroundZ(Camera& camera, int dir){
+  camera.roll += dir*SENSITIVITY;
+  vec4 v1(cos(camera.roll), -sin(camera.roll), 0 ,0);
+  vec4 v2(sin(camera.roll),cos(camera.roll),0,0);
+  vec4 v3(0, 0, 1,0);
+  vec4 v4(0,0,0,1);
+  camera.R = mat4(v1,v2,v3,v4);
+}
+
+//pitch
+void rotation_aroundX(Camera& camera, int dir){
+  camera.pitch += dir*SENSITIVITY;
+  vec4 v1(1, 0, 0,0);
+  vec4 v2(0,cos(camera.pitch),-sin(camera.pitch),0);
+  vec4 v3(0, sin(camera.pitch), cos(camera.pitch),0);
   vec4 v4(0,0,0,1);
   camera.R = mat4(v1,v2,v3,v4);
 }
@@ -155,11 +191,9 @@ void Update(Camera &camera)
     camera.position.z -= SENSITIVITY;
   }
   else if(keystate[SDL_SCANCODE_LEFT]){
-    // camera.position.x -= SENSITIVITY; //Camera moves to the left
     rotation_aroundY(camera,1);
   }
   else if(keystate[SDL_SCANCODE_RIGHT]){
-    // camera.position.x += SENSITIVITY; //Camera moves to the right
     rotation_aroundY(camera,-1);
   }
   else if(keystate[SDL_SCANCODE_W]){
@@ -173,6 +207,27 @@ void Update(Camera &camera)
   }
   else if(keystate[SDL_SCANCODE_D]){
       lightPos += right*LIGHT_SENSITIVITY;
+  }
+  else if (keystate[SDL_SCANCODE_I]){
+    rotation_aroundX(camera,-1);
+  }
+  else if (keystate[SDL_SCANCODE_K]){
+    rotation_aroundX(camera,1);
+
+  }
+  else if (keystate[SDL_SCANCODE_J]){
+    rotation_aroundZ(camera,1);
+
+  }
+  else if (keystate[SDL_SCANCODE_L]){
+    rotation_aroundZ(camera,-1);
+
+  }
+  else if (keystate[SDL_SCANCODE_B]){
+    camera.position.x -= SENSITIVITY; //Camera moves to the left
+  }
+  else if (keystate[SDL_SCANCODE_V]){
+    camera.position.x += SENSITIVITY; //Camera moves to the left
   }
 }
 
