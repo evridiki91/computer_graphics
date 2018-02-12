@@ -62,6 +62,8 @@ bool loadObj(std::string path, std::vector<Triangle>& triangles ){
 			linestream >> vector.y;
 			linestream >> vector.z;
 			vector.w = 1;
+			vector.y *=-1;
+			vector.z *=-1;
 			vertices.push_back(vector);
 		}
 		// else if (line.substr(0,2) == "vt"){
@@ -72,11 +74,13 @@ bool loadObj(std::string path, std::vector<Triangle>& triangles ){
 		// }
 
 		else if (line[0] == 'f'){
-			std::istringstream linestream(line.substr(2)); // check after 2nd character
 			glm::vec4 face;
-			linestream >> face.x ;
-			linestream >> face.y;
-			linestream >> face.z;
+		  const char* line_ptr=line.c_str();
+			int x,y,z,temp1,temp2,temp3;
+	    sscanf (line_ptr, "f %d//%d %d//%d %d//%d",&x,&temp1,&y,&temp2,&z,&temp3); //here it read the line start with f and store the corresponding values in the variables
+			face.x = x;
+			face.y = y;
+			face.z = z;
 			face.w = 1;
 			//obj starts from 1 index not zero
 			face.x--;

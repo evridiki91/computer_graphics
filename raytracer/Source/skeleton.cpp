@@ -1,4 +1,3 @@
-#include <iostream>
 #include <glm/glm.hpp>
 #include <SDL.h>
 #include "SDL.h"
@@ -95,7 +94,7 @@ int main( int argc, char* argv[] )
 }
 
 void initialize_camera(Camera &camera){
-  camera.position = vec4(0,0.1,-0.3,0);
+  camera.position = vec4(0,-0.1,-0.3,0);
   camera.yaw = 0;
   camera.pitch = 0;
   camera.roll = 0;
@@ -118,24 +117,48 @@ vec3 DirectLight( const Intersection& i){
   return D;
 }
 
-
+#define NO_SAMPLES 1
 /*Place your drawing here*/
 void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Intersection &closestIntersection){
   /* Clear buffer */
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
+  if (NO_SAMPLES == 1){
+    for(int x = 0; x < SCREEN_WIDTH; x++){
+        for(int y = 0; y < SCREEN_HEIGHT; y++){
+          vec4 d( (x - (SCREEN_WIDTH/2)), + (y - (SCREEN_HEIGHT/2)), FOCAL_LENGTH,1);
+          d = camera.R * d;
+          bool intersection = ClosestIntersection(camera.position,d,triangles,closestIntersection);
+          //printf("intersection is %s",intersection);
+          if (intersection==true) {
+            //printf("Intersection is true I'm in");
+            vec3 light = triangles[closestIntersection.triangleIndex].color*(DirectLight(closestIntersection) + indirectLight);
+            PutPixelSDL(screen, x, y, light);
+          }
+          else PutPixelSDL(screen,x,y,black);
+        }
+      }
+  }
+  else{
   for(int x = 0; x < SCREEN_WIDTH; x++){
     for(int y = 0; y < SCREEN_HEIGHT; y++){
-    vec4 d(x - (SCREEN_WIDTH/2), y - (SCREEN_HEIGHT/2), FOCAL_LENGTH,1);
-    d = camera.R * d;
-      bool intersection = ClosestIntersection(camera.position,d,triangles,closestIntersection);
-      //printf("intersection is %s",intersection);
-      if (intersection==true) {
-        //printf("Intersection is true I'm in");
-        vec3 light = triangles[closestIntersection.triangleIndex].color*(DirectLight(closestIntersection) + indirectLight);
-
-        PutPixelSDL(screen, x, y, light);
+      vec3 sum(0,0,0);
+      for (int dx = -(NO_SAMPLES-1)/2  ; dx < (NO_SAMPLES-1)/2; dx++){
+        for (int dy = -(NO_SAMPLES-1)/2  ; dy < (NO_SAMPLES-1)/2; dy++){
+          vec4 d(dx + (x - (SCREEN_WIDTH/2)), dy + (y - (SCREEN_HEIGHT/2)), FOCAL_LENGTH,1);
+          d = camera.R * d;
+          bool intersection = ClosestIntersection(camera.position,d,triangles,closestIntersection);
+          //printf("intersection is %s",intersection);
+          if (intersection==true) {
+            //printf("Intersection is true I'm in");
+            vec3 light = triangles[closestIntersection.triangleIndex].color*(DirectLight(closestIntersection) + indirectLight);
+            sum += light;
+            // PutPixelSDL(screen, x, y, light);
+          }
+        }
       }
-      else PutPixelSDL(screen, x, y, black);
+      sum /= NO_SAMPLES*NO_SAMPLES;
+      PutPixelSDL(screen,x,y,sum);
+      }
     }
   }
 }
