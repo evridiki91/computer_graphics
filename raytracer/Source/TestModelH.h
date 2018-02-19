@@ -38,7 +38,7 @@ public:
 };
 
 
-bool loadObj(std::string path, std::vector<Triangle>& triangles ){
+bool loadObj(std::string path, std::vector<Triangle>& triangles, vec3 color ){
 	glm::vec3 white(  0.75f, 0.75f, 0.75f );
 
 	std::vector<glm::vec4> vertices;
@@ -93,7 +93,7 @@ bool loadObj(std::string path, std::vector<Triangle>& triangles ){
 	}
 
 	for (int i = 0 ; i < faces.size(); i++){
-		triangles.push_back(Triangle(vertices[faces[i].x], vertices[faces[i].y], vertices[faces[i].z], white) );
+		triangles.push_back(Triangle(vertices[faces[i].x], vertices[faces[i].y], vertices[faces[i].z], color) );
 	}
 	return true;
 }

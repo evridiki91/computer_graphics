@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <math.h>
 #include <limits>
+#include <omp.h>
 
 
 using namespace std;
@@ -123,6 +124,7 @@ vec3 DirectLight( const Intersection& i){
 void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Intersection &closestIntersection){
   /* Clear buffer */
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
+  // #pragma omp parallel for private(pixelColor)
   if (NO_SAMPLES == 1){
     for(int x = 0; x < SCREEN_WIDTH; x++){
         for(int y = 0; y < SCREEN_HEIGHT; y++){
