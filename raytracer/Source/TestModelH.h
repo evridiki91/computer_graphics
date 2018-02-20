@@ -9,6 +9,23 @@
 #include <string>       // std::string
 #include <iostream>     // std::cout
 #include <sstream>      // std::istringstream
+
+enum lightType_t { Pointlight, Spotlight, Directional};
+
+class Light
+{
+public:
+	glm::vec4 pos;
+	glm::vec3 color;
+	lightType_t lightType;
+
+	Light(glm::vec4 pos,	glm::vec3 color,lightType_t lightType)
+	: pos(pos), color(color), lightType(lightType)
+	{
+		std::cout << "New Light Created" << '\n';
+	}
+};
+
 // Used to describe a triangular surface:
 class Triangle
 {
@@ -92,7 +109,7 @@ bool loadObj(std::string path, std::vector<Triangle>& triangles, glm::vec3 color
 		// std::cout << line << "\n";
 	}
 
-	for (int i = 0 ; i < faces.size(); i++){
+	for (unsigned int i = 0 ; i < faces.size(); i++){
 		triangles.push_back(Triangle(vertices[faces[i].x], vertices[faces[i].y], vertices[faces[i].z], color) );
 	}
 	return true;

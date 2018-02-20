@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <math.h>
 #include <limits>
-
+#include <omp.h>
 
 using namespace std;
 using glm::vec3;
@@ -28,21 +28,21 @@ struct Intersection {
   int triangleIndex;
 };
 
-vec4 lightPos( 0, -0.5, -0.7, 1.0 );
-vec3 lightColor = 14.f * vec3( 1, 1, 1 );
 vector<Triangle> triangles;
 vec3 indirectLight = 0.5f*vec3( 1, 1, 1 );
-glm::vec3 white(  0.75f, 0.75f, 0.75f );
+vec3 white(  0.75f, 0.75f, 0.75f );
+vector<Light> lights;
+size_t light_selection;
 
-#define SCREEN_WIDTH 256*2
-#define SCREEN_HEIGHT 320*2
+#define SCREEN_WIDTH 250*1.5
+#define SCREEN_HEIGHT 250*1.5
 #define FULLSCREEN_MODE false
 #define FOCAL_LENGTH SCREEN_HEIGHT/2
 #define SENSITIVITY 0.1f
 #define ROTATION_SENSITIVITY 1f
 #define LIGHT_SENSITIVITY 0.2f
 #define PI_F 3.14159265358979f
-#define ANTIALIASING_X 3.f
+#define ANTIALIASING_X 1.f
 vec3 black(0.0,0.0,0.0);
 
 
@@ -56,11 +56,21 @@ bool ClosestIntersection(vec4 start,vec4 dir, const vector<Triangle>& triangles,
 vec3 DirectLight( const Intersection& i );
 void initialize_camera(Camera &camera);
 
+void initLights(){
+  vec4 lightPos( 0, -0.5, 0, 1.0 );
+  vec3 lightColor = 14.f * vec3( 1, 1, 1 );
+  Light light(lightPos, lightColor, Pointlight);
+  lights.push_back(light);
+}
+
+
 int main( int argc, char* argv[] )
 {
   screen *screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN_MODE );
   Camera camera;
   initialize_camera(camera);
+  initLights();
+  light_selection = 0;
 
   Intersection closestIntersection;
   //Initialize triangles
@@ -106,19 +116,26 @@ void initialize_camera(Camera &camera){
 
 vec3 DirectLight( const Intersection& i){
   Triangle triangle = triangles[i.triangleIndex];
-  float r = glm::distance(lightPos, i.position);
   vec4 n_hat = (triangle.normal);
-  vec4 r_hat = glm::normalize(lightPos - i.position);
-  float dotProduct = glm::dot(r_hat,n_hat);
-  vec3 D = (lightColor * max(dotProduct,(0.0f)))/(4*PI_F*r*r);
-  Intersection shadowIntersection;
-	vec4 shadowDirection = -r_hat;
-  Intersection shadows_intersection;
-  bool inter = ClosestIntersection(lightPos,shadowDirection,triangles,shadows_intersection);
-  if (inter && (shadows_intersection.distance < r - 0.0001f) ){
-    return black;
+  vec3 sum(0,0,0);
+  for (size_t n = 0; n < lights.size(); n++){
+    vec4 lightPos = lights[n].pos;
+    vec3 lightColor = lights[n].color;
+
+    float r = glm::distance(lightPos, i.position);
+    vec4 r_hat = glm::normalize(lightPos - i.position);
+    float dotProduct = glm::dot(r_hat,n_hat);
+    vec3 D = (lightColor * max(dotProduct,(0.0f)))/(4*PI_F*r*r);
+    Intersection shadowIntersection;
+  	vec4 shadowDirection = -r_hat;
+    Intersection shadows_intersection;
+    bool inter = ClosestIntersection(lightPos,shadowDirection,triangles,shadows_intersection);
+    if (inter && (shadows_intersection.distance < r - 0.0001f) ){
+      continue;
+    }
+    sum += D;
   }
-  return D;
+  return sum;
 }
 
 
@@ -126,7 +143,6 @@ vec3 DirectLight( const Intersection& i){
 void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Intersection &closestIntersection){
   /* Clear buffer */
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
-  // #pragma omp parallel for private(pixelColor)
   if (ANTIALIASING_X == 1){
     for(int x = 0; x < SCREEN_WIDTH; x++){
         for(int y = 0; y < SCREEN_HEIGHT; y++){
@@ -136,17 +152,17 @@ void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Inters
           //printf("intersection is %s",intersection);
           if (intersection==true) {
             //printf("Intersection is true I'm in");
-            vec3 light = triangles[closestIntersection.triangleIndex].color*(DirectLight(closestIntersection) + indirectLight);
-            PutPixelSDL(screen, x, y, light);
+            vec3 color = triangles[closestIntersection.triangleIndex].color*(DirectLight(closestIntersection) + indirectLight);
+            PutPixelSDL(screen, x, y, color);
           }
           else PutPixelSDL(screen,x,y,black);
         }
       }
   }
   else{
-    for(int x = 0; x < SCREEN_WIDTH*ANTIALIASING_X; x+=ANTIALIASING_X){
+    for(int x = 0; x < SCREEN_WIDTH*ANTIALIASING_X; x+=int(ANTIALIASING_X)){
       int truex =(x/ANTIALIASING_X);
-      for(int y = 0; y < SCREEN_HEIGHT*ANTIALIASING_X; y+=ANTIALIASING_X){
+      for(int y = 0; y < SCREEN_HEIGHT*ANTIALIASING_X; y+=int(ANTIALIASING_X)){
         int truey = (y/ANTIALIASING_X);
         vec3 sum(0,0,0);
         for (int sample_x = 0; sample_x < ANTIALIASING_X; sample_x++ ){
@@ -157,8 +173,8 @@ void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Inters
             //printf("intersection is %s",intersection);
             if (intersection==true) {
               //printf("Intersection is true I'm in");
-              vec3 light = triangles[closestIntersection.triangleIndex].color*(DirectLight(closestIntersection) + indirectLight);
-              sum += light;
+              vec3 color = triangles[closestIntersection.triangleIndex].color*(DirectLight(closestIntersection) + indirectLight);
+              sum += color;
             }
           }
         }
@@ -226,20 +242,25 @@ void Update(Camera &camera)
     rotation_aroundY(camera,-1);
   }
   else if(keystate[SDL_SCANCODE_W]){
-    lightPos += forward*LIGHT_SENSITIVITY;
+    lights[light_selection].pos += forward*LIGHT_SENSITIVITY;
   }
   else if(keystate[SDL_SCANCODE_S]){
-      lightPos -= forward*LIGHT_SENSITIVITY;
+    lights[light_selection].pos -= forward*LIGHT_SENSITIVITY;
   }
   else if(keystate[SDL_SCANCODE_A]){
-      lightPos -= right*LIGHT_SENSITIVITY;
+      lights[light_selection].pos -= right*LIGHT_SENSITIVITY;
   }
   else if(keystate[SDL_SCANCODE_D]){
-      lightPos += right*LIGHT_SENSITIVITY;
+      lights[light_selection].pos += right*LIGHT_SENSITIVITY;
   }
   else if (keystate[SDL_SCANCODE_I]){
     rotation_aroundX(camera,-1);
   }
+  else if (keystate[SDL_SCANCODE_L]){
+    initLights();
+    light_selection ++;
+  }
+
   else if (keystate[SDL_SCANCODE_K]){
     rotation_aroundX(camera,1);
 
