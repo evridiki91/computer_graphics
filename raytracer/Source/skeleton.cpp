@@ -6,7 +6,6 @@
 #include <stdint.h>
 #include <math.h>
 #include <limits>
-#include <omp.h>
 
 
 using namespace std;
@@ -30,18 +29,20 @@ struct Intersection {
 };
 
 vec4 lightPos( 0, -0.5, -0.7, 1.0 );
-vec3 lightColor = 50.f * vec3( 1, 1, 1 );
+vec3 lightColor = 14.f * vec3( 1, 1, 1 );
 vector<Triangle> triangles;
 vec3 indirectLight = 0.5f*vec3( 1, 1, 1 );
+glm::vec3 white(  0.75f, 0.75f, 0.75f );
 
-#define SCREEN_WIDTH 256
-#define SCREEN_HEIGHT 320
+#define SCREEN_WIDTH 256*2
+#define SCREEN_HEIGHT 320*2
 #define FULLSCREEN_MODE false
 #define FOCAL_LENGTH SCREEN_HEIGHT/2
 #define SENSITIVITY 0.1f
 #define ROTATION_SENSITIVITY 1f
 #define LIGHT_SENSITIVITY 0.2f
 #define PI_F 3.14159265358979f
+#define ANTIALIASING_X 3.f
 vec3 black(0.0,0.0,0.0);
 
 
@@ -87,6 +88,7 @@ int main( int argc, char* argv[] )
       Update(camera);
       Draw(screen,camera,triangles,closestIntersection);
       SDL_Renderframe(screen);
+      // return 0;
     }
 
   SDL_SaveImage( screen, "screenshot.bmp" );
@@ -119,13 +121,13 @@ vec3 DirectLight( const Intersection& i){
   return D;
 }
 
-#define NO_SAMPLES 5.f
+
 /*Place your drawing here*/
 void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Intersection &closestIntersection){
   /* Clear buffer */
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
   // #pragma omp parallel for private(pixelColor)
-  if (NO_SAMPLES == 1){
+  if (ANTIALIASING_X == 1){
     for(int x = 0; x < SCREEN_WIDTH; x++){
         for(int y = 0; y < SCREEN_HEIGHT; y++){
           vec4 d( (x - (SCREEN_WIDTH/2)), + (y - (SCREEN_HEIGHT/2)), FOCAL_LENGTH,1);
@@ -142,13 +144,14 @@ void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Inters
       }
   }
   else{
-    for(int x = 0; x < SCREEN_WIDTH; x++){
-      for(int y = 0; y < SCREEN_HEIGHT; y++){
+    for(int x = 0; x < SCREEN_WIDTH*ANTIALIASING_X; x+=ANTIALIASING_X){
+      int truex =(x/ANTIALIASING_X);
+      for(int y = 0; y < SCREEN_HEIGHT*ANTIALIASING_X; y+=ANTIALIASING_X){
+        int truey = (y/ANTIALIASING_X);
         vec3 sum(0,0,0);
-        vec3 pixel(0,0,0);
-        for (int dx = -(NO_SAMPLES-1)/2  ; dx < (NO_SAMPLES-1)/2; dx++){
-          for (int dy = -(NO_SAMPLES-1)/2  ; dy < (NO_SAMPLES-1)/2; dy++){
-            vec4 d(dx + (x - (SCREEN_WIDTH/2)), dy + (y - (SCREEN_HEIGHT/2)), FOCAL_LENGTH,1);
+        for (int sample_x = 0; sample_x < ANTIALIASING_X; sample_x++ ){
+          for (int sample_y = 0 ; sample_y < ANTIALIASING_X; sample_y++ ){
+            vec4 d(x + sample_x - (SCREEN_WIDTH*ANTIALIASING_X/2), y + sample_y - (SCREEN_HEIGHT*ANTIALIASING_X/2), FOCAL_LENGTH*ANTIALIASING_X,1);
             d = camera.R * d;
             bool intersection = ClosestIntersection(camera.position,d,triangles,closestIntersection);
             //printf("intersection is %s",intersection);
@@ -159,8 +162,8 @@ void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Inters
             }
           }
         }
-        sum /= NO_SAMPLES*NO_SAMPLES;
-        PutPixelSDL(screen,x,y,sum);
+        sum /= ANTIALIASING_X*ANTIALIASING_X;
+        PutPixelSDL(screen,truex,truey,sum);
       }
     }
   }

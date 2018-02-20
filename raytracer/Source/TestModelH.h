@@ -38,7 +38,7 @@ public:
 };
 
 
-bool loadObj(std::string path, std::vector<Triangle>& triangles, vec3 color ){
+bool loadObj(std::string path, std::vector<Triangle>& triangles, glm::vec3 color ){
 	glm::vec3 white(  0.75f, 0.75f, 0.75f );
 
 	std::vector<glm::vec4> vertices;
