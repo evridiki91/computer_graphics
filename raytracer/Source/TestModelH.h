@@ -12,19 +12,48 @@
 
 enum lightType_t { Pointlight, Spotlight, Directional};
 
+class Phong
+{
+public:
+	float diffuse;
+	float specular;
+	float ambient;
+
+	Phong(float diffuse, float specular, float ambient)
+	: diffuse(diffuse), specular(specular), ambient(ambient) {}
+
+};
+
+class Reflective
+{
+public:
+	float ioreflection;
+};
+
+class Refractive
+{
+public:
+	float ior;
+};
+
+
 class Light
 {
 public:
 	glm::vec4 pos;
 	glm::vec3 color;
+	float diffuse_power;
+	float specular_power;
 	lightType_t lightType;
 
-	Light(glm::vec4 pos,	glm::vec3 color,lightType_t lightType)
-	: pos(pos), color(color), lightType(lightType)
+	Light(glm::vec4 pos,glm::vec3 color, float diffuse_power, float specular_power, lightType_t lightType)
+	: pos(pos), color(color),diffuse_power(diffuse_power), specular_power(specular_power), lightType(lightType)
 	{
 		std::cout << "New Light Created" << '\n';
 	}
 };
+
+
 
 // Used to describe a triangular surface:
 class Triangle
@@ -35,9 +64,13 @@ public:
 	glm::vec4 v2;
 	glm::vec4 normal;
 	glm::vec3 color;
+	Phong phong;
+	// Reflective reflective;
+	// Refractive refractive;
 
-	Triangle( glm::vec4 v0, glm::vec4 v1, glm::vec4 v2, glm::vec3 color )
-		: v0(v0), v1(v1), v2(v2), color(color)
+	Triangle( glm::vec4 v0, glm::vec4 v1, glm::vec4 v2, glm::vec3 color,
+		float diffuse, float specular, float ambient )
+		: v0(v0), v1(v1), v2(v2), color(color), phong(diffuse, specular, ambient)
 	{
 		ComputeNormal();
 	}
@@ -57,7 +90,6 @@ public:
 
 bool loadObj(std::string path, std::vector<Triangle>& triangles, glm::vec3 color ){
 	glm::vec3 white(  0.75f, 0.75f, 0.75f );
-
 	std::vector<glm::vec4> vertices;
 	std::vector<glm::vec4> faces;
 
@@ -110,7 +142,7 @@ bool loadObj(std::string path, std::vector<Triangle>& triangles, glm::vec3 color
 	}
 
 	for (unsigned int i = 0 ; i < faces.size(); i++){
-		triangles.push_back(Triangle(vertices[faces[i].x], vertices[faces[i].y], vertices[faces[i].z], color) );
+		triangles.push_back(Triangle(vertices[faces[i].x], vertices[faces[i].y], vertices[faces[i].z], color, 1.0,0.0,0.5) );
 	}
 	return true;
 }
@@ -153,24 +185,24 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	vec4 H(0,L,L,1);
 
 	// Floor:
-	triangles.push_back( Triangle( C, B, A, white ) );
-	triangles.push_back( Triangle( C, D, B, white ) );
+	triangles.push_back( Triangle( C, B, A, white,1.0,0.0,0.5) );
+	triangles.push_back( Triangle( C, D, B, white,1.0,0.0,0.5 ) );
 
 	// Left wall
-	triangles.push_back( Triangle( A, E, C, red ) );
-	triangles.push_back( Triangle( C, E, G, red ) );
+	triangles.push_back( Triangle( A, E, C, red,1.0 ,0.0,0.5) );
+	triangles.push_back( Triangle( C, E, G, red,1.0 ,0.0,0.5) );
 
 	// Right wall
-	triangles.push_back( Triangle( F, B, D, green ) );
-	triangles.push_back( Triangle( H, F, D, green ) );
+	triangles.push_back( Triangle( F, B, D, green,1.0 ,0.0,0.5) );
+	triangles.push_back( Triangle( H, F, D, green,1.0 ,0.0,0.5) );
 
 	// Ceiling
-	triangles.push_back( Triangle( E, F, G, white ) );
-	triangles.push_back( Triangle( F, H, G, white ) );
+	triangles.push_back( Triangle( E, F, G, white,1.0,0.0,0.5 ) );
+	triangles.push_back( Triangle( F, H, G, white,1.0 ,0.0,0.5) );
 
 	// Back wall
-	triangles.push_back( Triangle( G, D, C, white ) );
-	triangles.push_back( Triangle( G, H, D, white ) );
+	triangles.push_back( Triangle( G, D, C, white,1.0,0.0 ,0.5) );
+	triangles.push_back( Triangle( G, H, D, white,1.0,0.0 ,0.5) );
 
 	// ---------------------------------------------------------------------------
 	// Short block
@@ -186,24 +218,24 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	H = vec4( 82,165,225,1);
 
 	// Front
-	triangles.push_back( Triangle(E,B,A,yellow) );
-	triangles.push_back( Triangle(E,F,B,yellow) );
+	triangles.push_back( Triangle(E,B,A,yellow, 1.0,0.0,0.5) );
+	triangles.push_back( Triangle(E,F,B,yellow,1.0,0.0 ,0.5) );
 
 	// Front
-	triangles.push_back( Triangle(F,D,B,yellow) );
-	triangles.push_back( Triangle(F,H,D,yellow) );
+	triangles.push_back( Triangle(F,D,B,yellow, 1.0,0.0,0.5) );
+	triangles.push_back( Triangle(F,H,D,yellow,1.0,0.0,0.5) );
 
 	// BACK
-	triangles.push_back( Triangle(H,C,D,yellow) );
-	triangles.push_back( Triangle(H,G,C,yellow) );
+	triangles.push_back( Triangle(H,C,D,yellow,1.0,0.0,0.5) );
+	triangles.push_back( Triangle(H,G,C,yellow,1.0,0.0,0.5) );
 
 	// LEFT
-	triangles.push_back( Triangle(G,E,C,yellow) );
-	triangles.push_back( Triangle(E,A,C,yellow) );
+	triangles.push_back( Triangle(G,E,C,yellow,1.0,0.0,0.5) );
+	triangles.push_back( Triangle(E,A,C,yellow,1.0,0.0,0.5) );
 
 	// TOP
-	triangles.push_back( Triangle(G,F,E,yellow) );
-	triangles.push_back( Triangle(G,H,F,yellow) );
+	triangles.push_back( Triangle(G,F,E,yellow,1.0,0.0,0.5) );
+	triangles.push_back( Triangle(G,H,F,yellow,1.0,0.0,0.5) );
 
 	// ---------------------------------------------------------------------------
 	// Tall block
@@ -219,24 +251,24 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	H = vec4(314,330,456,1);
 
 	// Front
-	triangles.push_back( Triangle(E,B,A,blue) );
-	triangles.push_back( Triangle(E,F,B,blue) );
+	triangles.push_back( Triangle(E,B,A,blue,0.2,0.8,0.5) );
+	triangles.push_back( Triangle(E,F,B,blue,0.2,0.8,0.5) );
 
 	// Front
-	triangles.push_back( Triangle(F,D,B,blue) );
-	triangles.push_back( Triangle(F,H,D,blue) );
+	triangles.push_back( Triangle(F,D,B,blue,0.2,0.8,0.5) );
+	triangles.push_back( Triangle(F,H,D,blue,0.2,0.8,0.5) );
 
 	// BACK
-	triangles.push_back( Triangle(H,C,D,blue) );
-	triangles.push_back( Triangle(H,G,C,blue) );
+	triangles.push_back( Triangle(H,C,D,blue,0.2,0.8,0.5) );
+	triangles.push_back( Triangle(H,G,C,blue,0.2,0.8,0.5) );
 
 	// LEFT
-	triangles.push_back( Triangle(G,E,C,blue) );
-	triangles.push_back( Triangle(E,A,C,blue) );
+	triangles.push_back( Triangle(G,E,C,blue,0.2,0.8,0.5) );
+	triangles.push_back( Triangle(E,A,C,blue,0.2,0.8,0.5) );
 
 	// TOP
-	triangles.push_back( Triangle(G,F,E,blue) );
-	triangles.push_back( Triangle(G,H,F,blue) );
+	triangles.push_back( Triangle(G,F,E,blue,0.2,0.8,0.5) );
+	triangles.push_back( Triangle(G,H,F,blue,0.2,0.8,0.5) );
 
 
 	// ----------------------------------------------
