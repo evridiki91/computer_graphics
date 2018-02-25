@@ -10,8 +10,8 @@ B_DIR=Build
 EXEC=$(B_DIR)/$(FILE)
 
 # default build settings
-CC_OPTS=-c -std=c++11 -pipe -Wall -Wno-switch -ggdb -g3 -O3 -Werror
-LN_OPTS=
+CC_OPTS=-c -std=c++11 -pipe -Wall -Wno-switch -ggdb -g3 -O3 -Werror -fopenmp
+LN_OPTS=-fopenmp
 CC=g++
 
 ########

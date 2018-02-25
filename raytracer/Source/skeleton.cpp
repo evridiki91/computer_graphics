@@ -44,15 +44,19 @@ size_t light_selection;
 
 
 #define ANTIALIASING_X 2.f
-#define DIFFUSE_INTENSITY 0.8f
-#define SPECULAR_INTENSITY 0.2f
-#define SHINY_FACTOR 100.f
+
+//LIGHT PARAMETERS
+#define DIFFUSE_INTENSITY  0.8f
+#define SPECULAR_INTENSITY 0.1f
+#define AMBIENT_INTENSITY  0.1f
+#define SHINY_FACTOR 15.f
+#define LIGHT_COLOR_INTENSITY 14.f
 
 vec3 black(0.0,0.0,0.0);
 
 
 /* ----------------------------------------------------------------------------*/
-/* FUNCTIONS                                                                   */
+/* FUNCTIONS PROTOTYPES                                                        */
 
 void Update(Camera &camera);
 void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Intersection &closestIntersection);
@@ -62,16 +66,15 @@ vec3 DirectLight( const Intersection& i , Camera &camera);
 void initialize_camera(Camera &camera);
 vec3 calculateColor(vec3 color,const Intersection& i, Camera &camera );
 vec3 pointLight(const Intersection& i, int n, vec4 n_hat, Camera &camera);
+void initLights();
 
+/* ----------------------------------------------------------------------------*/
+/* FUNCTIONS                                                                   */
+/* ----------------------------------------------------------------------------*/
 
-void initLights(){
-  vec4 lightPos( 0, -0.5, 0, 1.0 );
-  vec3 lightColor = 14.f * vec3( 1, 1, 1 );
-  Light light(lightPos, lightColor, DIFFUSE_INTENSITY, SPECULAR_INTENSITY, Pointlight );
-  lights.push_back(light);
-}
-
-
+/* ----------------------------------------------------------------------------*/
+/* MAIN                                                                   */
+/* ----------------------------------------------------------------------------*/
 
 int main( int argc, char* argv[] )
 {
@@ -116,10 +119,15 @@ int main( int argc, char* argv[] )
   return 0;
 }
 
-vec3 calculateColor(vec3 color,const Intersection& i, Camera &camera ){
-  vec3 D = DirectLight(i, camera);
-  return color*D;
+/* ----------------------------------------------------------------------------*/
+/* INITIALISERS                                                                   */
+/* ----------------------------------------------------------------------------*/
 
+void initLights(){
+  vec4 lightPos( 0, 0, -1.5, 1.0 );
+  vec3 lightColor = LIGHT_COLOR_INTENSITY * vec3( 1, 1, 1 );
+  Light light(lightPos, lightColor, DIFFUSE_INTENSITY, SPECULAR_INTENSITY, AMBIENT_INTENSITY, Pointlight );
+  lights.push_back(light);
 }
 
 void initialize_camera(Camera &camera){
@@ -129,7 +137,26 @@ void initialize_camera(Camera &camera){
   camera.roll = 0;
 }
 
+vec3 IndirectLight(){
+  return 0.5f*vec3( 1, 1, 1 );
+}
+
+/* ----------------------------------------------------------------------------*/
+/* CALCULATE DIRECT AND INDIRECT LIGHT CONTRIBUTION AND COLOR                                                                   */
+/* ----------------------------------------------------------------------------*/
+
+vec3 calculateColor(vec3 color,const Intersection& i, Camera &camera ){
+  vec3 D = DirectLight(i, camera);
+  vec3 I = IndirectLight();
+  return color*D+I*color;
+}
+
+/* ----------------------------------------------------------------------------*/
+/* LIGHT INTENSITY CALCULATION FOR                                             */
+/* ----------------------------------------------------------------------------*/
+
 vec3 pointLight(const Intersection& i, int n, vec4 n_hat, Camera &camera){
+
   vec4 lightPos = lights[n].pos;
   vec3 color = lights[n].color;
 
@@ -147,16 +174,20 @@ vec3 pointLight(const Intersection& i, int n, vec4 n_hat, Camera &camera){
     return vec3(0,0,0);
   }
 
-  vec3 diffuse = attenuation * diff_intensity;
+  vec3 diffuse = attenuation * diff_intensity * triangles[i.triangleIndex].phong.diffuse;
 
   vec4 viewDir = normalize(-camera.position);
   vec4 H = normalize(r_hat + viewDir );
   float spec_intensity = max(glm::dot(n_hat,H),(0.0f));
-  vec3 specular = attenuation * pow(spec_intensity,SHINY_FACTOR);
+  vec3 specular = attenuation * pow(spec_intensity,SHINY_FACTOR)*triangles[i.triangleIndex].phong.specular;
 
-  vec3 D = diffuse*DIFFUSE_INTENSITY + specular*SPECULAR_INTENSITY;
+  vec3 D = diffuse*lights[n].diffuse_power + specular*lights[n].specular_power + lights[n].ambient_power * triangles[i.triangleIndex].phong.ambient ;
   return D;
 }
+
+/* ----------------------------------------------------------------------------*/
+/* DIRECT LIGHT CONTRIBUTION                                                                    */
+/* ----------------------------------------------------------------------------*/
 
 vec3 DirectLight( const Intersection& i,Camera &camera ){
   Triangle triangle = triangles[i.triangleIndex];
@@ -185,6 +216,7 @@ vec3 DirectLight( const Intersection& i,Camera &camera ){
 void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Intersection &closestIntersection){
   /* Clear buffer */
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
+
   for(int x = 0; x < SCREEN_WIDTH*ANTIALIASING_X; x+=int(ANTIALIASING_X)){
     int truex =(x/ANTIALIASING_X);
     for(int y = 0; y < SCREEN_HEIGHT*ANTIALIASING_X; y+=int(ANTIALIASING_X)){
@@ -195,9 +227,7 @@ void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Inters
           vec4 d(x + sample_x - (SCREEN_WIDTH*ANTIALIASING_X/2), y + sample_y - (SCREEN_HEIGHT*ANTIALIASING_X/2), FOCAL_LENGTH*ANTIALIASING_X,1);
           d = camera.R * d;
           bool intersection = ClosestIntersection(camera.position,d,triangles,closestIntersection);
-          //printf("intersection is %s",intersection);
           if (intersection==true) {
-            //printf("Intersection is true I'm in");
             vec3 color = calculateColor(triangles[closestIntersection.triangleIndex].color,closestIntersection, camera);
             sum += color;
           }
@@ -329,7 +359,6 @@ bool ClosestIntersection(vec4 start,vec4 dir, const vector<Triangle>& triangles,
     float t = x.x;
     float u = x.y;
     float v = x.z;
-    //printf("t : %f, u : %f, v : %f",v);
 
     //Otan valume = fevgun oi mavres grammes
     if(u >= 0 && v >= 0 && (u + v) <= 1 && t >= 0 && t < closestIntersection.distance){
