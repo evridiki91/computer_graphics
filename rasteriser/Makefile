@@ -10,14 +10,14 @@ B_DIR=Build
 EXEC=$(B_DIR)/$(FILE)
 
 # default build settings
-CC_OPTS=-c -pipe -Wall -Wno-switch -ggdb -g3 
+CC_OPTS=-c -pipe -Wall -Wno-switch -ggdb -g3
 LN_OPTS=
 CC=g++
 
 ########
 #       SDL options
 SDL_CFLAGS := $(shell sdl2-config --cflags)
-GLM_CFLAGS := -I$(GLMDIR)
+GLM_CFLAGS := -I../glm
 SDL_LDFLAGS := $(shell sdl2-config --libs)
 
 ########
@@ -38,10 +38,10 @@ $(B_DIR)/$(FILE).o : $(S_DIR)/$(FILE).cpp $(S_DIR)/SDLauxiliary.h $(S_DIR)/TestM
 
 
 ########
-#   Main build rule     
+#   Main build rule
 Build : $(OBJ) Makefile
 	$(CC) $(LN_OPTS) -o $(EXEC) $(OBJ) $(SDL_LDFLAGS)
 
 
 clean:
-	rm -f $(B_DIR)/* 
+	rm -f $(B_DIR)/*
