@@ -24,7 +24,7 @@ using glm::mat4;
 
 vec3 white(1,1,1);
 vector<Triangle> triangles;
-float depthBuffer[SCREEN_HEIGHT][SCREEN_WIDTH];
+float depthBuffer[SCREEN_WIDTH][SCREEN_HEIGHT];
 mat4 transformation_mat;
 
 struct Pixel
@@ -54,7 +54,7 @@ void DrawTriangles(vector<Triangle> triangles, screen* screen, Camera& camera);
 void Draw(screen* screen, Camera& camera);
 void VertexShader( const vec4& v, Pixel& p, Camera& camera );
 void Interpolate( Pixel a, Pixel b, vector<Pixel>& result );
-void DrawLineSDL( screen* screen, ivec2 a, ivec2 b, vec3 color );
+void DrawLineSDL( screen* screen, Pixel a, Pixel b, vec3 color );
 void DrawPolygonEdges( vector<vec4>& vertices,screen* screen, Camera &camera );
 
 
@@ -108,10 +108,13 @@ void ComputePolygonRows(const vector<Pixel>& vertexPixels,vector<Pixel>& leftPix
 void DrawPolygonRows( const vector<Pixel>& leftPixels,const vector<Pixel>& rightPixels
                 ,vec3 currentColor, screen* screen){
   for (int row = 0; row < rightPixels.size(); row++){
-    for (int left = leftPixels[row].x; left < rightPixels[row].x; left++){
-      //PutPixelSDL( screen, projPos.x, projPos.y, color );
-      if (depthBuffer[left][leftPixels[row].y] > leftPixels[row].zinv)
-        PutPixelSDL(screen, left, leftPixels[row].y, currentColor);
+    vector<Pixel> pixels(abs(rightPixels[row].x - leftPixels[row].x + 1 ));
+    Interpolate(leftPixels[row], rightPixels[row], pixels);
+    for (int point = 0; point < pixels.size(); point++){
+      if (pixels[point].zinv >= depthBuffer[pixels[point].x][pixels[point].y] ){
+        depthBuffer[pixels[point].x][pixels[point].y] = pixels[point].zinv;
+        PutPixelSDL(screen, pixels[point].x, pixels[point].y, currentColor);
+      }
     }
   }
 }
@@ -190,11 +193,9 @@ int main( int argc, char* argv[] )
   LoadTestModel(triangles);
   while( NoQuitMessageSDL() ){
       Update(camera);
-      // Draw(screen,camera);
       SDL_Renderframe(screen);
       Draw(screen,camera);
-
-      }
+  }
 
   SDL_SaveImage( screen, "screenshot.bmp" );
   KillSDL(screen);
@@ -214,7 +215,6 @@ void DrawTriangles(vector<Triangle> triangles, screen* screen, Camera& camera){
 }
 
 /*Place your drawing here*/
-//TODO ADD TRIANGLES
 void Draw(screen* screen, Camera& camera )
 {
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
@@ -222,7 +222,7 @@ void Draw(screen* screen, Camera& camera )
   //clear depth
   for( int y=0; y<SCREEN_HEIGHT; ++y )
     for( int x=0; x<SCREEN_WIDTH; ++x )
-      depthBuffer[y][x] = 0;
+      depthBuffer[x][y] = 0;
 
   /* Clear buffer */
   for( uint32_t i=0; i<triangles.size(); ++i ){
@@ -245,19 +245,25 @@ void VertexShader( const vec4& v, Pixel& p, Camera& camera ){
 
 void Interpolate( Pixel a, Pixel b, vector<Pixel>& result ){
   int N = result.size();
-  vec2 step = vec2(b-a) / float(std::max(N-1,1));
-  vec2 current( a );
+  float stepx =  ((b.x-a.x) / float(std::max(N-1,1)) );
+  float stepy =  ((b.y-a.y) / float(std::max(N-1,1)) );
+  float stepz = (b.zinv-a.zinv) / float(std::max(N-1,1)) ;
+  vec3 step = vec3(stepx,stepy,stepz);
+  vec3 current = vec3(a.x,a.y,a.zinv);
+
   for( int i=0; i<N; ++i ) {
-    result[i] = current;
+    result[i].x = current.x; result[i].y = current.y; result[i].zinv = current.z;
     current += step;
   }
 }
 
 //a - start b - end
-void DrawLineSDL( screen* screen, ivec2 a, ivec2 b, vec3 color ){
-  ivec2 delta = glm::abs( a - b );
-  uint32_t pixels = glm::max( delta.x, delta.y ) + 1;
-  vector<ivec2> line( pixels ); //get the pixel positions of the line
+void DrawLineSDL( screen* screen, Pixel a, Pixel b, vec3 color ){
+  int deltax = (glm::abs( a.x - b.x ));
+  int deltay = (glm::abs( a.y - b.y ));
+
+  uint32_t pixels = glm::max( deltax, deltay ) + 1;
+  vector<Pixel> line( pixels ); //get the pixel positions of the line
   Interpolate( a, b, line );
   for (uint32_t i = 0; i < pixels; i++)
     PutPixelSDL(screen,line[i].x,line[i].y,color);
@@ -266,7 +272,7 @@ void DrawLineSDL( screen* screen, ivec2 a, ivec2 b, vec3 color ){
 void DrawPolygonEdges( vector<vec4>& vertices,screen* screen, Camera &camera ) {
   int V = vertices.size();
   // Transform each vertex from 3D world position to 2D image position:
-  vector<ivec2> projectedVertices( V );
+  vector<Pixel> projectedVertices( V );
   for( int i=0; i<V; ++i ) {
     VertexShader( vertices[i], projectedVertices[i],camera );
   }
