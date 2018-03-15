@@ -24,7 +24,7 @@ using glm::mat4;
 
 vec3 white(1,1,1);
 vector<Triangle> triangles;
-
+float depthBuffer[SCREEN_HEIGHT][SCREEN_WIDTH];
 mat4 transformation_mat;
 
 struct Pixel
@@ -33,7 +33,6 @@ struct Pixel
   int y;
   float zinv;
 };
-
 
 struct Camera {
   vec4 position;
@@ -53,15 +52,15 @@ void TransformationMatrix(glm::mat4 &M, Camera& camera);
 void initialize_camera(Camera &camera);
 void DrawTriangles(vector<Triangle> triangles, screen* screen, Camera& camera);
 void Draw(screen* screen, Camera& camera);
-void VertexShader( const vec4& v, ivec2& p, Camera& camera );
-void Interpolate( ivec2 a, ivec2 b, vector<ivec2>& result );
+void VertexShader( const vec4& v, Pixel& p, Camera& camera );
+void Interpolate( Pixel a, Pixel b, vector<Pixel>& result );
 void DrawLineSDL( screen* screen, ivec2 a, ivec2 b, vec3 color );
 void DrawPolygonEdges( vector<vec4>& vertices,screen* screen, Camera &camera );
 
 
-void ComputePolygonRows(const vector<ivec2>& vertexPixels,vector<ivec2>& leftPixels,vector<ivec2>& rightPixels ){
-  int min_y = SCREEN_HEIGHT;
-  int max_y = 0;
+void ComputePolygonRows(const vector<Pixel>& vertexPixels,vector<Pixel>& leftPixels,vector<Pixel>& rightPixels ){
+  int min_y = numeric_limits<int>::max();
+  int max_y = numeric_limits<int>::min();
 
   // 1. Find max and min y-value of the polygon
   for (int i = 0; i < vertexPixels.size(); i++ ){
@@ -90,7 +89,7 @@ void ComputePolygonRows(const vector<ivec2>& vertexPixels,vector<ivec2>& leftPix
     int j = (i+1)%(vertexPixels.size());
     //finding new rows
     int new_rows = abs(vertexPixels[i].y - vertexPixels[j].y) + 1;
-    vector<ivec2> interpolated_line(new_rows);
+    vector<Pixel> interpolated_line(new_rows);
     Interpolate(vertexPixels[i],vertexPixels[j],interpolated_line);
 
     for (int new_row_i = 0; new_row_i < new_rows; new_row_i++){
@@ -104,6 +103,29 @@ void ComputePolygonRows(const vector<ivec2>& vertexPixels,vector<ivec2>& leftPix
       }
     }
   }
+}
+
+void DrawPolygonRows( const vector<Pixel>& leftPixels,const vector<Pixel>& rightPixels
+                ,vec3 currentColor, screen* screen){
+  for (int row = 0; row < rightPixels.size(); row++){
+    for (int left = leftPixels[row].x; left < rightPixels[row].x; left++){
+      //PutPixelSDL( screen, projPos.x, projPos.y, color );
+      if (depthBuffer[left][leftPixels[row].y] > leftPixels[row].zinv)
+        PutPixelSDL(screen, left, leftPixels[row].y, currentColor);
+    }
+  }
+}
+
+void DrawPolygon( const vector<vec4>& vertices, vec3 currentColor, screen* screen, Camera& camera )
+{
+  int V = vertices.size();
+  vector<Pixel> vertexPixels( V );
+  for( int i=0; i<V; ++i )
+      VertexShader( vertices[i], vertexPixels[i],camera );
+  vector<Pixel> leftPixels;
+  vector<Pixel> rightPixels;
+  ComputePolygonRows( vertexPixels, leftPixels, rightPixels );
+  DrawPolygonRows( leftPixels, rightPixels,currentColor,screen );
 }
 
 //yaw - y
@@ -151,7 +173,7 @@ void TransformationMatrix(glm::mat4 &M, Camera& camera){
 
 
 void initialize_camera(Camera &camera){
-  camera.position = vec4( 0, 0, -3.001,1 );
+  camera.position = vec4( 0, 0, -2.5,1 );
   camera.yaw = 0;
   camera.pitch = 0;
   camera.roll = 0;
@@ -161,23 +183,6 @@ void initialize_camera(Camera &camera){
 
 int main( int argc, char* argv[] )
 {
-  vector<ivec2> vertexPixels(3);
-  vertexPixels[0] = ivec2(10, 5);
-  vertexPixels[1] = ivec2( 5,10);
-  vertexPixels[2] = ivec2(15,15);
-  vector<ivec2> leftPixels;
-  vector<ivec2> rightPixels;
-  ComputePolygonRows( vertexPixels, leftPixels, rightPixels );
-  for( int row=0; row<leftPixels.size(); ++row )
-  {
-    cout << "Start: ("
-    << leftPixels[row].x << ","
-    << leftPixels[row].y << "). "
-    << "End: ("
-    << rightPixels[row].x << ","
-    << rightPixels[row].y << "). " << endl;
-  }
-  return 0;
   Camera camera;
   initialize_camera(camera);
   screen *screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN_MODE );
@@ -187,8 +192,9 @@ int main( int argc, char* argv[] )
       Update(camera);
       // Draw(screen,camera);
       SDL_Renderframe(screen);
-      DrawTriangles(triangles,screen,camera);
-  }
+      Draw(screen,camera);
+
+      }
 
   SDL_SaveImage( screen, "screenshot.bmp" );
   KillSDL(screen);
@@ -208,33 +214,36 @@ void DrawTriangles(vector<Triangle> triangles, screen* screen, Camera& camera){
 }
 
 /*Place your drawing here*/
-void Draw(screen* screen, Camera& camera)
+//TODO ADD TRIANGLES
+void Draw(screen* screen, Camera& camera )
 {
+  memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
+
+  //clear depth
+  for( int y=0; y<SCREEN_HEIGHT; ++y )
+    for( int x=0; x<SCREEN_WIDTH; ++x )
+      depthBuffer[y][x] = 0;
+
   /* Clear buffer */
-  vec3 colour(1.0,0.0,0.0);
   for( uint32_t i=0; i<triangles.size(); ++i ){
     vector<vec4> vertices(3);
     vertices[0] = triangles[i].v0;
     vertices[1] = triangles[i].v1;
     vertices[2] = triangles[i].v2;
-    for(int v=0; v<3; ++v){
-      ivec2 projPos;
-      VertexShader( vertices[v], projPos,camera );
-      vec3 color(1,1,1);
-      PutPixelSDL( screen, projPos.x, projPos.y, color );
-    }
+    vec3 currentColor = triangles[i].color;
+    DrawPolygon( vertices,currentColor,screen,camera );
   }
 }
 
-void VertexShader( const vec4& v, ivec2& p, Camera& camera ){
+void VertexShader( const vec4& v, Pixel& p, Camera& camera ){
   vec4 p_origin = v - camera.position;
   vec4 pixel = p_origin*camera.R;
-
   p.x = FOCAL_LENGTH*pixel.x/pixel.z + SCREEN_WIDTH/2;
   p.y = FOCAL_LENGTH*pixel.y/pixel.z + SCREEN_HEIGHT/2;
+  p.zinv = 1.f/pixel.z;
 }
 
-void Interpolate( ivec2 a, ivec2 b, vector<ivec2>& result ){
+void Interpolate( Pixel a, Pixel b, vector<Pixel>& result ){
   int N = result.size();
   vec2 step = vec2(b-a) / float(std::max(N-1,1));
   vec2 current( a );
