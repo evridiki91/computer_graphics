@@ -27,6 +27,14 @@ vector<Triangle> triangles;
 
 mat4 transformation_mat;
 
+struct Pixel
+{
+  int x;
+  int y;
+  float zinv;
+};
+
+
 struct Camera {
   vec4 position;
   mat4 R; //rotation
@@ -52,32 +60,49 @@ void DrawPolygonEdges( vector<vec4>& vertices,screen* screen, Camera &camera );
 
 
 void ComputePolygonRows(const vector<ivec2>& vertexPixels,vector<ivec2>& leftPixels,vector<ivec2>& rightPixels ){
-  int min = -numeric_limits<int>::max();
-  int max = +numeric_limits<int>::max();
+  int min_y = SCREEN_HEIGHT;
+  int max_y = 0;
 
-  // 1. Find max and min y-vale of the polygon
+  // 1. Find max and min y-value of the polygon
   for (int i = 0; i < vertexPixels.size(); i++ ){
-    if (vertexPixels[i].y > max) max = vertexPixels[i].y;
-    if (vertexPixels[i].y < min) min = vertexPixels[i].y;
+    if (vertexPixels[i].y > max_y) max_y = vertexPixels[i].y;
+    if (vertexPixels[i].y < min_y) min_y = vertexPixels[i].y;
   }
 
   //computing number of rows
-  int rows = max-min+1;
+  int rows = max_y-min_y+1;
 
 // 2. Resize leftPixels and rightPixels
   leftPixels.resize(rows); rightPixels.resize(rows);
 
-// 3. Initialize the x-coordinates in leftPixels to something large
+// 3. Initialize the x-coordinates in leftPixels to something large value
+// and the x-coordinates in rightPixels to some really small value
   for( int i=0; i<rows; ++i )
   {
-    leftPixels[i].x = +numeric_limits<int>::max();
-    rightPixels[i].x = -numeric_limits<int>::max();
+    leftPixels[i].x  = numeric_limits<int>::max();
+    rightPixels[i].x = numeric_limits<int>::min();
   }
 
-// 4. Loop through all edges of the polygon and use
+  // 4. Loop through all edges of the polygon and use
   for( int i=0; i<vertexPixels.size(); ++i )
   {
-    printf("Hi\n");
+    //finding the connecting edge
+    int j = (i+1)%(vertexPixels.size());
+    //finding new rows
+    int new_rows = abs(vertexPixels[i].y - vertexPixels[j].y) + 1;
+    vector<ivec2> interpolated_line(new_rows);
+    Interpolate(vertexPixels[i],vertexPixels[j],interpolated_line);
+
+    for (int new_row_i = 0; new_row_i < new_rows; new_row_i++){
+      int row_i = interpolated_line[new_row_i].y - min_y;
+
+      if (interpolated_line[new_row_i].x > rightPixels[row_i ].x ){
+        rightPixels[row_i] = interpolated_line[new_row_i];
+      }
+      if (interpolated_line[new_row_i].x < leftPixels[row_i ].x ){
+        leftPixels[row_i] = interpolated_line[new_row_i];
+      }
+    }
   }
 }
 
@@ -136,6 +161,23 @@ void initialize_camera(Camera &camera){
 
 int main( int argc, char* argv[] )
 {
+  vector<ivec2> vertexPixels(3);
+  vertexPixels[0] = ivec2(10, 5);
+  vertexPixels[1] = ivec2( 5,10);
+  vertexPixels[2] = ivec2(15,15);
+  vector<ivec2> leftPixels;
+  vector<ivec2> rightPixels;
+  ComputePolygonRows( vertexPixels, leftPixels, rightPixels );
+  for( int row=0; row<leftPixels.size(); ++row )
+  {
+    cout << "Start: ("
+    << leftPixels[row].x << ","
+    << leftPixels[row].y << "). "
+    << "End: ("
+    << rightPixels[row].x << ","
+    << rightPixels[row].y << "). " << endl;
+  }
+  return 0;
   Camera camera;
   initialize_camera(camera);
   screen *screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN_MODE );
