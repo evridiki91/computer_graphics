@@ -309,6 +309,9 @@ void Update(Camera& camera)
   int dx;
   int dy;
   SDL_GetRelativeMouseState( &dx, &dy );
+  vec4 right(transformation_mat[0][0], transformation_mat[0][1], transformation_mat[0][2], 1 );
+  vec4 down(transformation_mat[1][0], transformation_mat[1][1], transformation_mat[1][2], 1 );
+  vec4 forward(transformation_mat[2][0], transformation_mat[2][1], transformation_mat[2][2], 1 );
 
   const uint8_t* keystate = SDL_GetKeyboardState(NULL);
   if(keystate[SDL_SCANCODE_UP]){
@@ -320,27 +323,28 @@ void Update(Camera& camera)
     TransformationMatrix(transformation_mat,camera);
   }
   else if(keystate[SDL_SCANCODE_LEFT]){
-    camera.position.x -= SENSITIVITY;
-    TransformationMatrix(transformation_mat, camera);
-  }
-  else if(keystate[SDL_SCANCODE_RIGHT]){
-    camera.position.x += SENSITIVITY;
-    TransformationMatrix(transformation_mat, camera);
-  }
-  else if(keystate[SDL_SCANCODE_D]){
     camera.yaw  -= ROTATION_SENSITIVITY;
     TransformationMatrix(transformation_mat, camera);
   }
-  else if(keystate[SDL_SCANCODE_A]){
+  else if(keystate[SDL_SCANCODE_RIGHT]){
     camera.yaw  += ROTATION_SENSITIVITY;
     TransformationMatrix(transformation_mat, camera);
   }
-  // else if (keystate[SDL_SCANCODE_I]){
-  //
-  // }
+
+  else if(keystate[SDL_SCANCODE_W]){
+    lights[current_light_index].pos += forward*LIGHT_SENSITIVITY;
+  }
+  else if(keystate[SDL_SCANCODE_S]){
+    lights[current_light_index].pos -= forward*LIGHT_SENSITIVITY;
+  }
+  else if (keystate[SDL_SCANCODE_D]){
+    lights[current_light_index].pos += right*LIGHT_SENSITIVITY;
+
+  }
+  else if (keystate[SDL_SCANCODE_A]){
+    lights[current_light_index].pos -= right*LIGHT_SENSITIVITY;
+  }
 }
-
-
 
 //yaw - y
 mat4 yaw_rotation(Camera& camera){
