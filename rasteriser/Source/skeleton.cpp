@@ -14,15 +14,15 @@ using glm::vec4;
 using glm::mat4;
 
 
-#define SCREEN_WIDTH 320
+#define SCREEN_WIDTH 320*2
 #define FOCAL_LENGTH SCREEN_WIDTH/2
-#define SCREEN_HEIGHT 256
+#define SCREEN_HEIGHT 320*2
 #define FULLSCREEN_MODE false
 #define SENSITIVITY 0.1f
 #define ROTATION_SENSITIVITY 0.05f
 #define LIGHT_SENSITIVITY 0.2f
 #define PI_F 3.14159265358979f
-#define LIGHT_COLOR_INTENSITY 1.1f
+#define LIGHT_COLOR_INTENSITY 11.f
 
 struct Pixel
 {
@@ -58,7 +58,7 @@ vec3 white(1,1,1);
 vector<Triangle> triangles;
 float depthBuffer[SCREEN_WIDTH][SCREEN_HEIGHT];
 mat4 transformation_mat;
-vec3 indirectLightPowerPerArea = 1.1f*vec3( 1, 1, 1 );
+vec3 indirectLightPowerPerArea = 0.5f*vec3( 1, 1, 1 );
 vector<Light> lights;
 int current_light_index;
 
@@ -82,6 +82,8 @@ void DrawPolygon(const vector<Vertex>& vertices, vec3 currentColor, vec4 normal,
 void ComputePolygonRows(const vector<Pixel>& vertexPixels,vector<Pixel>& leftPixels,vector<Pixel>& rightPixels );
 void DrawPolygonRows( const vector<Pixel>& leftPixels,const vector<Pixel>& rightPixels
                 ,vec3 currentColor, vec4 normal, screen* screen, Camera& camera);
+
+/******************************************************************************************/
 
 vec3 directLight( int n, vec4 normal, Pixel pixel, Camera &camera){
 
@@ -217,7 +219,6 @@ void Draw(screen* screen, Camera& camera )
     initialize_vertices(vertices,triangles[i]);
     vec3 currentColor = triangles[i].color;
     vec4 currentNormal = triangles[i].normal;
-    vec3 currentReflectance = triangles[i].color;
     DrawPolygon( vertices,currentColor,currentNormal,screen,camera );
   }
 }
@@ -240,9 +241,8 @@ void PixelShader(const Pixel& p, screen* screen,Camera& camera, vec3 currentColo
   if( p.zinv > depthBuffer[x][y])
   {
     depthBuffer[x][y] = p.zinv;
-    // vec3 directlight = directLight(current_light_index,currentNormal,p,camera);
-    // vec3 directLight (0,0,0);
-    vec3 illumination = currentColor * (directlight + indirectLightPowerPerArea);
+    vec3 directlight = directLight(current_light_index,currentNormal,p,camera);
+    vec3 illumination = currentColor * (directlight +  indirectLightPowerPerArea);
     PutPixelSDL( screen, x, y, illumination);
   }
 }
@@ -262,6 +262,7 @@ void Interpolate( Pixel a, Pixel b, vector<Pixel>& result ){
     result[i].x = current.x;
     result[i].y = current.y;
     result[i].zinv = current.z;
+    result[i].pos3d = current_pos3d;
     current += step;
     current_pos3d += step_pos3d;
   }
@@ -386,7 +387,7 @@ void TransformationMatrix(glm::mat4 &M, Camera& camera){
 
 
 void initialize_camera(Camera &camera){
-  camera.position = vec4( 0, 0, -3,1 );
+  camera.position = vec4( 0, 0, -2.1,1 );
   camera.yaw = 0;
   camera.pitch = 0;
   camera.roll = 0;
