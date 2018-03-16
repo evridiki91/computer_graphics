@@ -29,7 +29,7 @@ struct Pixel
   int x;
   int y;
   float zinv;
-  vec3 illumination;
+  vec4 pos3d;
 };
 
 struct Camera {
@@ -40,11 +40,10 @@ struct Camera {
   float roll;
 };
 
+
 struct Vertex
 {
   vec4 position;
-  vec4 normal;
-  vec3 reflectance;
 };
 
 struct Light
@@ -59,14 +58,14 @@ vec3 white(1,1,1);
 vector<Triangle> triangles;
 float depthBuffer[SCREEN_WIDTH][SCREEN_HEIGHT];
 mat4 transformation_mat;
-vec3 indirectLightPowerPerArea = 0.5f*vec3( 1, 1, 1 );
+vec3 indirectLightPowerPerArea = 1.1f*vec3( 1, 1, 1 );
 vector<Light> lights;
 int current_light_index;
 
 /* -------------------------------------------------
  FUNCTIONS
  ---------------------------------------------------*/
-
+void initLights();
 void Update(Camera& camera);
 void Draw(screen* screen, Camera& camera);
 void TransformationMatrix(glm::mat4 &M, Camera& camera);
@@ -77,18 +76,20 @@ void VertexShader( const Vertex& vertices, Pixel& p, Camera& camera );
 void Interpolate( Pixel a, Pixel b, vector<Pixel>& result );
 void DrawLineSDL( screen* screen, Pixel a, Pixel b, vec3 color );
 void DrawPolygonEdges( vector<Vertex>& vertices,screen* screen, Camera &camera );
-void PixelShader(const Pixel& p, screen* screen, vec3 currentColor);
+void PixelShader(const Pixel& p, screen* screen,Camera& camera, vec3 currentColor, vec4 currentNormal);
+void initialize_vertices( vector<Vertex>& vertices, Triangle triangle);
+void DrawPolygon(const vector<Vertex>& vertices, vec3 currentColor, vec4 normal,screen* screen, Camera& camera );
+void ComputePolygonRows(const vector<Pixel>& vertexPixels,vector<Pixel>& leftPixels,vector<Pixel>& rightPixels );
+void DrawPolygonRows( const vector<Pixel>& leftPixels,const vector<Pixel>& rightPixels
+                ,vec3 currentColor, vec4 normal, screen* screen, Camera& camera);
 
-
-
-
-vec3 directLight( int n, Vertex v, Camera &camera){
+vec3 directLight( int n, vec4 normal, Pixel pixel, Camera &camera){
 
   vec4 lightPos = lights[n].pos;
   vec3 power = lights[n].color;
-  float r = glm::distance(lightPos, v.position);//DISTANCE
-  vec4 r_hat = glm::normalize(lightPos - v.position);//DIRECTION of light
-  float dotProduct = glm::dot(v.normal,r_hat);
+  float r = glm::distance(lightPos, pixel.pos3d);//DISTANCE
+  vec4 r_hat = glm::normalize(lightPos - pixel.pos3d);//DIRECTION of light
+  float dotProduct = glm::dot(normal,r_hat);
   float diff_intensity = std::max(dotProduct,(0.0f));
   vec3 attenuation = power / (4*PI_F*r*r); //colour light / distance
   vec3 total =  diff_intensity*attenuation;
@@ -144,17 +145,17 @@ void ComputePolygonRows(const vector<Pixel>& vertexPixels,vector<Pixel>& leftPix
 }
 
 void DrawPolygonRows( const vector<Pixel>& leftPixels,const vector<Pixel>& rightPixels
-                ,vec3 currentColor, screen* screen){
+                ,vec3 currentColor, vec4 normal, screen* screen, Camera& camera){
   for (int row = 0; row < rightPixels.size(); row++){
     vector<Pixel> pixels(abs(rightPixels[row].x - leftPixels[row].x + 1 ));
     Interpolate(leftPixels[row], rightPixels[row], pixels);
     for (int point = 0; point < pixels.size(); point++){
-      PixelShader(pixels[point], screen,currentColor);
+      PixelShader(pixels[point], screen, camera, currentColor, normal);
     }
   }
 }
 
-void DrawPolygon( const vector<Vertex>& vertices, vec3 currentColor, screen* screen, Camera& camera )
+void DrawPolygon( const vector<Vertex>& vertices, vec3 currentColor, vec4 normal,screen* screen, Camera& camera )
 {
   int V = vertices.size();
   vector<Pixel> vertexPixels( V );
@@ -163,70 +164,9 @@ void DrawPolygon( const vector<Vertex>& vertices, vec3 currentColor, screen* scr
   vector<Pixel> leftPixels;
   vector<Pixel> rightPixels;
   ComputePolygonRows( vertexPixels, leftPixels, rightPixels );
-  DrawPolygonRows( leftPixels, rightPixels,currentColor,screen );
+  DrawPolygonRows( leftPixels, rightPixels,currentColor, normal, screen,camera);
 }
 
-//yaw - y
-mat4 yaw_rotation(Camera& camera){
-  vec4 v1(cos(camera.yaw), 0, sin(camera.yaw),0);
-  vec4 v2(0,1,0,0);
-  vec4 v3(-sin(camera.yaw), 0, cos(camera.yaw),0);
-  vec4 v4(0,0,0,1);
-  return mat4(v1,v2,v3,v4);
-}
-
-//roll - z
-mat4 roll_rotation(Camera& camera){
-  vec4 v1(cos(camera.roll), -sin(camera.roll), 0 ,0);
-  vec4 v2(sin(camera.roll),cos(camera.roll),0,0);
-  vec4 v3(0, 0, 1,0);
-  vec4 v4(0,0,0,1);
-  return mat4(v1,v2,v3,v4);
-}
-
-//pitch - x
-mat4 pitch_rotation(Camera& camera){
-  vec4 v1(1, 0, 0,0);
-  vec4 v2(0,cos(camera.pitch),-sin(camera.pitch),0);
-  vec4 v3(0, sin(camera.pitch), cos(camera.pitch),0);
-  vec4 v4(0,0,0,1);
-  return mat4(v1,v2,v3,v4);
-}
-
-void TransformationMatrix(glm::mat4 &M, Camera& camera){
-  mat4 c = mat4(1.0);
-  mat4 c_minus = mat4(1.0);
-  for(int i = 0; i < 4 ; i++) {
-    c[i][3] = camera.position[i];
-    c_minus[i][3] = camera.position[i];
-  }
-
-  mat4 yaw_mat = yaw_rotation(camera);
-  mat4 roll_mat = roll_rotation(camera);
-  mat4 pitch_mat = pitch_rotation(camera);
-
-  camera.R = yaw_mat * roll_mat * pitch_mat;
-  M = c * (camera.R * c_minus);
-}
-
-
-void initialize_camera(Camera &camera){
-  camera.position = vec4( 0, 0, -3,1 );
-  camera.yaw = 0;
-  camera.pitch = 0;
-  camera.roll = 0;
-
-  TransformationMatrix(transformation_mat ,camera );
-}
-
-void initLights(){
-  vec4 lightPos( 0, -0.5, -0.7, 1.0 );
-  vec3 lightPower = LIGHT_COLOR_INTENSITY*vec3( 1, 1, 1 );
-  Light light;
-  light.pos = lightPos;
-  light.color = lightPower;
-  lights.push_back(light);
-}
 
 
 int main( int argc, char* argv[] )
@@ -274,20 +214,11 @@ void Draw(screen* screen, Camera& camera )
   /* Clear buffer */
   for( uint32_t i=0; i<triangles.size(); ++i ){
     vector<Vertex> vertices(3);
-
+    initialize_vertices(vertices,triangles[i]);
     vec3 currentColor = triangles[i].color;
-    DrawPolygon( vertices,currentColor,screen,camera );
-  }
-}
-
-void initialize_vertices( vector<Vertex>& vertices, Triangle triangle){
-
-  vertices[0].position = triangle.v0;
-  vertices[1].position = triangle.v1;
-  vertices[2].position = triangle.v2;
-  for (int i = 0 ; i < 3; i++){
-    vertices[i].normal = triangle.normal;
-    vertices[i].reflectance = triangle.color;
+    vec4 currentNormal = triangles[i].normal;
+    vec3 currentReflectance = triangles[i].color;
+    DrawPolygon( vertices,currentColor,currentNormal,screen,camera );
   }
 }
 
@@ -297,19 +228,25 @@ void VertexShader( const Vertex& v, Pixel& p, Camera& camera ){
   p.x = FOCAL_LENGTH*pixel.x/pixel.z + SCREEN_WIDTH/2;
   p.y = FOCAL_LENGTH*pixel.y/pixel.z + SCREEN_HEIGHT/2;
   p.zinv = 1.f/pixel.z;
-  p.illumination = v.reflectance * (directLight(current_light_index, v, camera) + indirectLightPowerPerArea);
+  p.pos3d = v.position*p.zinv;
 }
 
-void PixelShader(const Pixel& p, screen* screen, vec3 currentColor)
+
+void PixelShader(const Pixel& p, screen* screen,Camera& camera, vec3 currentColor, vec4 currentNormal)
 {
   int x = p.x;
   int y = p.y;
+
   if( p.zinv > depthBuffer[x][y])
   {
     depthBuffer[x][y] = p.zinv;
-    PutPixelSDL( screen, x, y, currentColor);
+    // vec3 directlight = directLight(current_light_index,currentNormal,p,camera);
+    // vec3 directLight (0,0,0);
+    vec3 illumination = currentColor * (directlight + indirectLightPowerPerArea);
+    PutPixelSDL( screen, x, y, illumination);
   }
 }
+
 
 void Interpolate( Pixel a, Pixel b, vector<Pixel>& result ){
   int N = result.size();
@@ -317,11 +254,16 @@ void Interpolate( Pixel a, Pixel b, vector<Pixel>& result ){
   float stepy =  ((b.y-a.y) / float(std::max(N-1,1)) );
   float stepz = (b.zinv-a.zinv) / float(std::max(N-1,1)) ;
   vec3 step = vec3(stepx,stepy,stepz);
+  vec4 step_pos3d = (b.pos3d - a.pos3d) / float(std::max(N-1,1)) ;
   vec3 current = vec3(a.x,a.y,a.zinv);
+  vec4 current_pos3d = a.pos3d;
 
   for( int i=0; i<N; ++i ) {
-    result[i].x = current.x; result[i].y = current.y; result[i].zinv = current.z;
+    result[i].x = current.x;
+    result[i].y = current.y;
+    result[i].zinv = current.z;
     current += step;
+    current_pos3d += step_pos3d;
   }
 }
 
@@ -395,6 +337,74 @@ void Update(Camera& camera)
   // else if (keystate[SDL_SCANCODE_I]){
   //
   // }
+}
 
 
+
+//yaw - y
+mat4 yaw_rotation(Camera& camera){
+  vec4 v1(cos(camera.yaw), 0, sin(camera.yaw),0);
+  vec4 v2(0,1,0,0);
+  vec4 v3(-sin(camera.yaw), 0, cos(camera.yaw),0);
+  vec4 v4(0,0,0,1);
+  return mat4(v1,v2,v3,v4);
+}
+
+//roll - z
+mat4 roll_rotation(Camera& camera){
+  vec4 v1(cos(camera.roll), -sin(camera.roll), 0 ,0);
+  vec4 v2(sin(camera.roll),cos(camera.roll),0,0);
+  vec4 v3(0, 0, 1,0);
+  vec4 v4(0,0,0,1);
+  return mat4(v1,v2,v3,v4);
+}
+
+//pitch - x
+mat4 pitch_rotation(Camera& camera){
+  vec4 v1(1, 0, 0,0);
+  vec4 v2(0,cos(camera.pitch),-sin(camera.pitch),0);
+  vec4 v3(0, sin(camera.pitch), cos(camera.pitch),0);
+  vec4 v4(0,0,0,1);
+  return mat4(v1,v2,v3,v4);
+}
+
+void TransformationMatrix(glm::mat4 &M, Camera& camera){
+  mat4 c = mat4(1.0);
+  mat4 c_minus = mat4(1.0);
+  for(int i = 0; i < 4 ; i++) {
+    c[i][3] = camera.position[i];
+    c_minus[i][3] = camera.position[i];
+  }
+
+  mat4 yaw_mat = yaw_rotation(camera);
+  mat4 roll_mat = roll_rotation(camera);
+  mat4 pitch_mat = pitch_rotation(camera);
+
+  camera.R = yaw_mat * roll_mat * pitch_mat;
+  M = c * (camera.R * c_minus);
+}
+
+
+void initialize_camera(Camera &camera){
+  camera.position = vec4( 0, 0, -3,1 );
+  camera.yaw = 0;
+  camera.pitch = 0;
+  camera.roll = 0;
+
+  TransformationMatrix(transformation_mat ,camera );
+}
+
+void initLights(){
+  vec4 lightPos( 0, -0.5, -0.7, 1.0 );
+  vec3 lightPower = LIGHT_COLOR_INTENSITY*vec3( 1, 1, 1 );
+  Light light;
+  light.pos = lightPos;
+  light.color = lightPower;
+  lights.push_back(light);
+}
+
+void initialize_vertices( vector<Vertex>& vertices, Triangle triangle){
+  vertices[0].position = triangle.v0;
+  vertices[1].position = triangle.v1;
+  vertices[2].position = triangle.v2;
 }
