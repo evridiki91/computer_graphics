@@ -50,14 +50,17 @@ size_t light_selection;
 #define SPECULAR_INTENSITY 0.1f
 #define AMBIENT_INTENSITY  0.1f
 #define SHINY_FACTOR 15.f
-#define LIGHT_COLOR_INTENSITY 14.f
+#define LIGHT_COLOR_INTENSITY 15.f
+#define INDIRECT_LIGHT_INTENSITY 0.3f
 
 vec3 black(0.0,0.0,0.0);
 
 
 /* ----------------------------------------------------------------------------*/
 /* FUNCTIONS PROTOTYPES                                                        */
-
+vec3 IndirectLight(){
+  return INDIRECT_LIGHT_INTENSITY*vec3( 1, 1, 1 );
+}
 void Update(Camera &camera);
 void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Intersection &closestIntersection);
 bool ClosestIntersection(vec4 start,vec4 dir, const vector<Triangle>& triangles,
@@ -137,9 +140,6 @@ void initialize_camera(Camera &camera){
   camera.roll = 0;
 }
 
-vec3 IndirectLight(){
-  return 0.5f*vec3( 1, 1, 1 );
-}
 
 /* ----------------------------------------------------------------------------*/
 /* CALCULATE DIRECT AND INDIRECT LIGHT CONTRIBUTION AND COLOR                                                                   */
@@ -170,7 +170,7 @@ vec3 pointLight(const Intersection& i, int n, vec4 n_hat, Camera &camera){
   vec4 shadowDirection = -r_hat;
   Intersection shadows_intersection;
   bool inter = ClosestIntersection(lightPos,shadowDirection,triangles,shadows_intersection);
-  if (inter && (shadows_intersection.distance < r - 0.0001f) ){
+  if (inter && (shadows_intersection.distance < r - 0.0001f) ){ //to avoid intersection with itself
     return vec3(0,0,0);
   }
 
@@ -240,6 +240,11 @@ void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Inters
       PutPixelSDL(screen,truex,truey,sum);
     }
   }
+}
+
+vec4 reflection_direction(vec4 lightPos, Intersection i, vec4 normal ){
+  vec4 L = lightPos - i.position;
+  return normalize(2*glm::dot(normal,L)*normal - L);
 }
 
 void rotation_aroundY(Camera& camera, int dir){
