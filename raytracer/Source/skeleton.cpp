@@ -33,8 +33,8 @@ vec3 white(  0.75f, 0.75f, 0.75f );
 vector<Light> lights;
 size_t light_selection;
 
-#define SCREEN_WIDTH 250*1.5
-#define SCREEN_HEIGHT 250*1.5
+#define SCREEN_WIDTH 250
+#define SCREEN_HEIGHT 250
 #define FULLSCREEN_MODE false
 #define FOCAL_LENGTH SCREEN_HEIGHT/2
 #define SENSITIVITY 0.1f
@@ -43,7 +43,7 @@ size_t light_selection;
 #define PI_F 3.14159265358979f
 
 
-#define ANTIALIASING_X 2.f
+#define ANTIALIASING_X 1.f
 
 //LIGHT PARAMETERS
 #define DIFFUSE_INTENSITY  0.8f
@@ -174,14 +174,16 @@ vec3 pointLight(const Intersection& i, int n, vec4 n_hat, Camera &camera){
     return vec3(0,0,0);
   }
 
-  vec3 diffuse = attenuation * diff_intensity * triangles[i.triangleIndex].phong.diffuse;
+  vec3 diffuse = attenuation *  triangles[i.triangleIndex].phong.diffuse;
 
   vec4 viewDir = normalize(-camera.position);
   vec4 H = normalize(r_hat + viewDir );
   float spec_intensity = max(glm::dot(n_hat,H),(0.0f));
+
   vec3 specular = attenuation * pow(spec_intensity,SHINY_FACTOR)*triangles[i.triangleIndex].phong.specular;
 
-  vec3 D = diffuse*lights[n].diffuse_power + specular*lights[n].specular_power + lights[n].ambient_power * triangles[i.triangleIndex].phong.ambient ;
+  vec3 D = diffuse*lights[n].diffuse_power*diff_intensity + specular*lights[n].specular_power + lights[n].ambient_power * triangles[i.triangleIndex].phong.ambient ;
+  D = clamp(D,vec3(0,0,0),vec3(1,1,1));
   return D;
 }
 
@@ -193,6 +195,7 @@ vec3 DirectLight( const Intersection& i,Camera &camera ){
   Triangle triangle = triangles[i.triangleIndex];
   vec4 n_hat = (triangle.normal);
   vec3 sum(0,0,0);
+
   for (size_t n = 0; n < lights.size(); n++){
     vec3 D(0,0,0);
     //function for different lights?
@@ -312,7 +315,6 @@ void Update(Camera &camera)
   }
   else if (keystate[SDL_SCANCODE_O]){
     initLights();
-    light_selection ++;
   }
 
   else if (keystate[SDL_SCANCODE_K]){
@@ -333,6 +335,10 @@ void Update(Camera &camera)
   else if (keystate[SDL_SCANCODE_V]){
     camera.position.x += SENSITIVITY; //Camera moves to the left
   }
+  else if (keystate[SDL_SCANCODE_C]){
+    light_selection = (light_selection + 1 ) % lights.size();
+  }
+
 }
 
 bool ClosestIntersection(vec4 start,vec4 dir, const vector<Triangle>& triangles,
