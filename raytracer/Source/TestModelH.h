@@ -10,54 +10,50 @@
 #include <iostream>     // std::cout
 #include <sstream>      // std::istringstream
 
-#define DIF 0.6
-#define SPC 0.3
-#define AMB 0.1
+#define DIF 0.8f
+#define SPC 0.f
+#define SPC1 0.2f
+#define AMB 0.1f
 
 enum lightType_t { Pointlight, Spotlight, Directional};
-
+enum matType_t { Diffuse, Reflective, Refractive};
 class Phong
 {
 public:
-	float diffuse;
-	float specular;
-	float ambient;
+	float kd;
+	float ks;
+	float ka;
 
-	Phong(float diffuse, float specular, float ambient)
-	: diffuse(diffuse), specular(specular), ambient(ambient) {}
+	Phong(float kd, float ks, float ka)
+	: kd(kd), ks(ks), ka(ka) {}
 
 };
 
-class Reflective
-{
-public:
-	float ioreflection;
-};
-
-class Refractive
-{
-public:
-	float ior;
-};
+// class Refractive
+// {
+// public:
+// 	float ior;
+// };
 
 
 class Light
 {
 public:
 	glm::vec4 pos;
-	glm::vec3 color;
-	float diffuse_power;
-	float specular_power;
-	float ambient_power;
+	glm::vec3 diffuse_color;
+	glm::vec3 specular_color;
+	glm::vec3 intensity;
+	glm::vec3 ambient_intensity;
 	lightType_t lightType;
 
-	Light(glm::vec4 pos,glm::vec3 color, float diffuse_power, float specular_power, float ambient_power,lightType_t lightType)
-	: pos(pos), color(color),diffuse_power(diffuse_power), specular_power(specular_power),ambient_power(ambient_power), lightType(lightType)
+	Light(glm::vec4 pos,glm::vec3 diffuse_color, glm::vec3 specular_color,
+		glm::vec3 intensity, glm::vec3 ambient_intensity,lightType_t lightType)
+	: pos(pos), diffuse_color(diffuse_color),specular_color(specular_color),
+	intensity(intensity),ambient_intensity(ambient_intensity), lightType(lightType)
 	{
 		std::cout << "New Light Created" << '\n';
 	}
 };
-
 
 
 // Used to describe a triangular surface:
@@ -70,12 +66,12 @@ public:
 	glm::vec4 normal;
 	glm::vec3 color;
 	Phong phong;
-	// Reflective reflective;
-	// Refractive refractive;
+	matType_t material;
+	float ior;
 
 	Triangle( glm::vec4 v0, glm::vec4 v1, glm::vec4 v2, glm::vec3 color,
-		float diffuse, float specular, float ambient )
-		: v0(v0), v1(v1), v2(v2), color(color), phong(diffuse, specular, ambient)
+		float diffuse, float specular, float ambient, matType_t material, float ior )
+		: v0(v0), v1(v1), v2(v2), color(color), phong(diffuse, specular, ambient), material(material) , ior(ior)
 	{
 		ComputeNormal();
 	}
@@ -147,7 +143,7 @@ bool loadObj(std::string path, std::vector<Triangle>& triangles, glm::vec3 color
 	}
 
 	for (unsigned int i = 0 ; i < faces.size(); i++){
-		triangles.push_back(Triangle(vertices[faces[i].x], vertices[faces[i].y], vertices[faces[i].z], color, DIF,SPC,AMB) );
+		triangles.push_back(Triangle(vertices[faces[i].x], vertices[faces[i].y], vertices[faces[i].z], color, DIF,SPC,AMB,Diffuse, 0 ) );
 	}
 	return true;
 }
@@ -192,24 +188,24 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	vec4 H(0,L,L,1);
 
 	// Floor:
-	triangles.push_back( Triangle( C, B, A, white,DIF,SPC,AMB) );
-	triangles.push_back( Triangle( C, D, B, white,DIF,SPC,AMB ) );
+	triangles.push_back( Triangle( C, B, A, white,DIF,SPC1,AMB, Diffuse, 0 ) );
+	triangles.push_back( Triangle( C, D, B, white,DIF,SPC1,AMB, Diffuse, 0 ) );
 
 	// Left wall
-	triangles.push_back( Triangle( A, E, C, red,DIF ,SPC,AMB) );
-	triangles.push_back( Triangle( C, E, G, red,DIF ,SPC,AMB) );
+	triangles.push_back( Triangle( A, E, C, red,DIF ,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle( C, E, G, red,DIF ,SPC,AMB, Diffuse, 0) );
 
 	// Right wall
-	triangles.push_back( Triangle( F, B, D, green,DIF ,SPC,AMB) );
-	triangles.push_back( Triangle( H, F, D, green,DIF ,SPC,AMB) );
+	triangles.push_back( Triangle( F, B, D, green,DIF ,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle( H, F, D, green,DIF ,SPC,AMB, Diffuse, 0) );
 
 	// Ceiling
-	triangles.push_back( Triangle( E, F, G, white,DIF,SPC,AMB ) );
-	triangles.push_back( Triangle( F, H, G, white,DIF ,SPC,AMB) );
+	triangles.push_back( Triangle( E, F, G, white,DIF,SPC1,AMB, Reflective, 0) );
+	triangles.push_back( Triangle( F, H, G, white,DIF ,SPC1,AMB, Reflective, 0) );
 
 	// Back wall
-	triangles.push_back( Triangle( G, D, C, white,DIF,SPC ,AMB) );
-	triangles.push_back( Triangle( G, H, D, white,DIF,SPC ,AMB) );
+	triangles.push_back( Triangle( G, D, C, white,DIF,SPC ,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle( G, H, D, white,DIF,SPC ,AMB, Diffuse, 0) );
 
 	// ---------------------------------------------------------------------------
 	// Short block
@@ -225,24 +221,24 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	H = vec4( 82,165,225,1);
 
 	// Front
-	triangles.push_back( Triangle(E,B,A,yellow, DIF,SPC,AMB) );
-	triangles.push_back( Triangle(E,F,B,yellow,DIF,SPC ,AMB) );
+	triangles.push_back( Triangle(E,B,A,yellow, DIF,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle(E,F,B,yellow,DIF,SPC ,AMB, Diffuse, 0) );
 
 	// Front
-	triangles.push_back( Triangle(F,D,B,yellow, DIF,SPC,AMB) );
-	triangles.push_back( Triangle(F,H,D,yellow,DIF,SPC,AMB) );
+	triangles.push_back( Triangle(F,D,B,yellow, DIF,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle(F,H,D,yellow,DIF,SPC,AMB, Diffuse, 0) );
 
 	// BACK
-	triangles.push_back( Triangle(H,C,D,yellow,DIF,SPC,AMB) );
-	triangles.push_back( Triangle(H,G,C,yellow,DIF,SPC,AMB) );
+	triangles.push_back( Triangle(H,C,D,yellow,DIF,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle(H,G,C,yellow,DIF,SPC,AMB, Diffuse, 0) );
 
 	// LEFT
-	triangles.push_back( Triangle(G,E,C,yellow,DIF,SPC,AMB) );
-	triangles.push_back( Triangle(E,A,C,yellow,DIF,SPC,AMB) );
+	triangles.push_back( Triangle(G,E,C,yellow,DIF,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle(E,A,C,yellow,DIF,SPC,AMB, Diffuse, 0) );
 
 	// TOP
-	triangles.push_back( Triangle(G,F,E,yellow,DIF,SPC,AMB) );
-	triangles.push_back( Triangle(G,H,F,yellow,DIF,SPC,AMB) );
+	triangles.push_back( Triangle(G,F,E,yellow,DIF,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle(G,H,F,yellow,DIF,SPC,AMB, Diffuse, 0) );
 
 	// ---------------------------------------------------------------------------
 	// Tall block
@@ -258,24 +254,24 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	H = vec4(314,330,456,1);
 
 	// Front
-	triangles.push_back( Triangle(E,B,A,blue,DIF,SPC,AMB) );
-	triangles.push_back( Triangle(E,F,B,blue,DIF,SPC,AMB) );
+	triangles.push_back( Triangle(E,B,A,blue,DIF,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle(E,F,B,blue,DIF,SPC,AMB, Diffuse, 0) );
 
 	// Front
-	triangles.push_back( Triangle(F,D,B,blue,DIF,SPC,AMB) );
-	triangles.push_back( Triangle(F,H,D,blue,DIF,SPC,AMB) );
+	triangles.push_back( Triangle(F,D,B,blue,DIF,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle(F,H,D,blue,DIF,SPC,AMB, Diffuse, 0) );
 
 	// BACK
-	triangles.push_back( Triangle(H,C,D,blue,DIF,SPC,AMB) );
-	triangles.push_back( Triangle(H,G,C,blue,DIF,SPC,AMB) );
+	triangles.push_back( Triangle(H,C,D,blue,DIF,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle(H,G,C,blue,DIF,SPC,AMB, Diffuse, 0) );
 
 	// LEFT
-	triangles.push_back( Triangle(G,E,C,blue,DIF,SPC,AMB) );
-	triangles.push_back( Triangle(E,A,C,blue,DIF,SPC,AMB) );
+	triangles.push_back( Triangle(G,E,C,blue,DIF,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle(E,A,C,blue,DIF,SPC,AMB, Diffuse, 0) );
 
 	// TOP
-	triangles.push_back( Triangle(G,F,E,blue,DIF,SPC,AMB) );
-	triangles.push_back( Triangle(G,H,F,blue,DIF,SPC,AMB) );
+	triangles.push_back( Triangle(G,F,E,blue,DIF,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle(G,H,F,blue,DIF,SPC,AMB, Diffuse, 0) );
 
 
 	// ----------------------------------------------

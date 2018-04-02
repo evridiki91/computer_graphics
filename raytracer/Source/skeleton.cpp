@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <math.h>
 #include <limits>
-#include <omp.h>
+// #include <omp.h>
 
 using namespace std;
 using glm::vec3;
@@ -33,28 +33,28 @@ vec3 white(  0.75f, 0.75f, 0.75f );
 vector<Light> lights;
 size_t light_selection;
 
-#define SCREEN_WIDTH 250
-#define SCREEN_HEIGHT 250
+#define SCREEN_WIDTH 250*2
+#define SCREEN_HEIGHT 250*2
 #define FULLSCREEN_MODE false
 #define FOCAL_LENGTH SCREEN_HEIGHT/2
 #define SENSITIVITY 0.1f
 #define ROTATION_SENSITIVITY 1f
 #define LIGHT_SENSITIVITY 0.2f
 #define PI_F 3.14159265358979f
+#define MAX_RECURSIVE_DEPTH 4
 
 
 #define ANTIALIASING_X 1.f
 
 //LIGHT PARAMETERS
-#define DIFFUSE_INTENSITY  0.8f
-#define SPECULAR_INTENSITY 0.1f
-#define AMBIENT_INTENSITY  0.1f
+#define DIFFUSE_COLOR  1.f
+#define SPECULAR_COLOR 0.2f
+#define AMBIENT_INTENSITY 0.1f
+#define LIGHT_INTENSITY 15.f
 #define SHINY_FACTOR 15.f
-#define LIGHT_COLOR_INTENSITY 15.f
-#define INDIRECT_LIGHT_INTENSITY 0.3f
+#define INDIRECT_LIGHT_INTENSITY 0.5f
 
 vec3 black(0.0,0.0,0.0);
-
 
 /* ----------------------------------------------------------------------------*/
 /* FUNCTIONS PROTOTYPES                                                        */
@@ -65,10 +65,10 @@ void Update(Camera &camera);
 void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Intersection &closestIntersection);
 bool ClosestIntersection(vec4 start,vec4 dir, const vector<Triangle>& triangles,
                          Intersection& closestIntersection );
-vec3 DirectLight( const Intersection& i , Camera &camera);
+vec3 DirectLight( const Intersection& i , vec4 camera);
 void initialize_camera(Camera &camera);
-vec3 calculateColor(vec3 color,const Intersection& i, Camera &camera );
-vec3 pointLight(const Intersection& i, int n, vec4 n_hat, Camera &camera);
+vec3 calculateColor(vec3 color,const Intersection& i, vec4 camera );
+vec3 pointLight(const Intersection& i, int n, vec4 n_hat, vec4 camera);
 void initLights();
 
 /* ----------------------------------------------------------------------------*/
@@ -128,8 +128,12 @@ int main( int argc, char* argv[] )
 
 void initLights(){
   vec4 lightPos( 0, 0, -1.5, 1.0 );
-  vec3 lightColor = LIGHT_COLOR_INTENSITY * vec3( 1, 1, 1 );
-  Light light(lightPos, lightColor, DIFFUSE_INTENSITY, SPECULAR_INTENSITY, AMBIENT_INTENSITY, Pointlight );
+
+  Light light(lightPos,
+    vec3(DIFFUSE_COLOR,DIFFUSE_COLOR,DIFFUSE_COLOR),
+    vec3(SPECULAR_COLOR,SPECULAR_COLOR,SPECULAR_COLOR),
+    vec3(LIGHT_INTENSITY,LIGHT_INTENSITY,LIGHT_INTENSITY),
+    vec3(AMBIENT_INTENSITY,AMBIENT_INTENSITY,AMBIENT_INTENSITY), Pointlight );
   lights.push_back(light);
 }
 
@@ -145,53 +149,54 @@ void initialize_camera(Camera &camera){
 /* CALCULATE DIRECT AND INDIRECT LIGHT CONTRIBUTION AND COLOR                                                                   */
 /* ----------------------------------------------------------------------------*/
 
-vec3 calculateColor(vec3 color,const Intersection& i, Camera &camera ){
+vec3 calculateColor(vec3 color,const Intersection& i, vec4 camera ){
   vec3 D = DirectLight(i, camera);
   vec3 I = IndirectLight();
-  return color*D+I*color;
+  return color*(D+I);
 }
 
 /* ----------------------------------------------------------------------------*/
 /* LIGHT INTENSITY CALCULATION FOR                                             */
 /* ----------------------------------------------------------------------------*/
 
-vec3 pointLight(const Intersection& i, int n, vec4 n_hat, Camera &camera){
+vec3 pointLight(const Intersection& i, int n, vec4 n_hat, vec4 camera){
 
   vec4 lightPos = lights[n].pos;
-  vec3 color = lights[n].color;
+  vec3 intensity_light = lights[n].intensity;
 
   float r = glm::distance(lightPos, i.position);//DISTANCE
   vec4 r_hat = glm::normalize(lightPos - i.position);//DIRECTION of light
-  float dotProduct = glm::dot(n_hat,r_hat);
-  float diff_intensity = max(dotProduct,(0.0f));
-  vec3 attenuation = color / (4*PI_F*r*r); //colour light / distance
 
-  Intersection shadowIntersection;
-  vec4 shadowDirection = -r_hat;
   Intersection shadows_intersection;
-  bool inter = ClosestIntersection(lightPos,shadowDirection,triangles,shadows_intersection);
-  if (inter && (shadows_intersection.distance < r - 0.0001f) ){ //to avoid intersection with itself
+  bool inter = ClosestIntersection(i.position + 0.0001f*r_hat ,r_hat,triangles,shadows_intersection);
+  if (inter && (shadows_intersection.distance < r ) ){
     return vec3(0,0,0);
   }
 
-  vec3 diffuse = attenuation *  triangles[i.triangleIndex].phong.diffuse;
+  float dotProduct = glm::dot(n_hat,r_hat);
+  float diffuse_term = max(dotProduct,(0.0f));
+  vec3 attenuation = intensity_light / (4*PI_F*r*r); //colour light / distance
 
-  vec4 viewDir = normalize(-camera.position);
+  vec4 viewDir = normalize(-camera);
   vec4 H = normalize(r_hat + viewDir );
   float spec_intensity = max(glm::dot(n_hat,H),(0.0f));
 
-  vec3 specular = attenuation * pow(spec_intensity,SHINY_FACTOR)*triangles[i.triangleIndex].phong.specular;
-
-  vec3 D = diffuse*lights[n].diffuse_power*diff_intensity + specular*lights[n].specular_power + lights[n].ambient_power * triangles[i.triangleIndex].phong.ambient ;
+  vec3 diffuse = attenuation * diffuse_term * triangles[i.triangleIndex].phong.kd ;
+  vec3 specular = attenuation * pow(spec_intensity,SHINY_FACTOR)*triangles[i.triangleIndex].phong.ks;
+  vec3 ambient  =  lights[n].diffuse_color * triangles[i.triangleIndex].phong.ka;
+  vec3 D = diffuse*lights[n].diffuse_color + specular*lights[n].specular_color + ambient;
   D = clamp(D,vec3(0,0,0),vec3(1,1,1));
   return D;
 }
 
+vec4 reflection_direction(vec4 inter, vec4 normal ){
+  return (inter - 2*glm::dot(inter,normal)*normal );
+}
 /* ----------------------------------------------------------------------------*/
 /* DIRECT LIGHT CONTRIBUTION                                                                    */
 /* ----------------------------------------------------------------------------*/
 
-vec3 DirectLight( const Intersection& i,Camera &camera ){
+vec3 DirectLight( const Intersection& i,vec4 camera ){
   Triangle triangle = triangles[i.triangleIndex];
   vec4 n_hat = (triangle.normal);
   vec3 sum(0,0,0);
@@ -214,6 +219,42 @@ vec3 DirectLight( const Intersection& i,Camera &camera ){
   return sum;
 }
 
+vec3 shade(vec4 start, vec4 d,std::vector<Triangle> &triangles,Intersection &closestIntersection, int depth){
+  bool intersection = ClosestIntersection(start,d,triangles,closestIntersection);
+  if (depth==2) std::cout << intersection << '\n';
+  vec3 color(0,0,0);
+
+  if (intersection==true) {
+    switch(triangles[closestIntersection.triangleIndex].material){
+      std::cout << depth << '\n';
+      case Diffuse : {
+        color += calculateColor(triangles[closestIntersection.triangleIndex].color,closestIntersection, start);
+        break;
+      }
+
+      case Reflective: {
+        if(depth < MAX_RECURSIVE_DEPTH){
+            //compute reflection of ray
+            vec4 reflected_d = reflection_direction(d,triangles[closestIntersection.triangleIndex].normal);
+            color += triangles[closestIntersection.triangleIndex].phong.ks
+                    * shade(closestIntersection.position+ 0.00001f*reflected_d,reflected_d ,triangles, closestIntersection, depth+1);
+            vec3 shader = shade(closestIntersection.position+ 0.00001f*reflected_d,reflected_d ,triangles, closestIntersection, depth+1);
+        }
+        break;
+      }
+      case Refractive: {
+        break;
+      }
+
+      default: {
+        std::cout << "Something went poopoos" << '\n';
+        break;
+      }
+    }
+  return color;
+  }
+  else return vec3(0,0,0);
+}
 
 /*Place your drawing here*/
 void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Intersection &closestIntersection){
@@ -229,11 +270,8 @@ void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Inters
         for (int sample_y = 0 ; sample_y < ANTIALIASING_X; sample_y++ ){
           vec4 d(x + sample_x - (SCREEN_WIDTH*ANTIALIASING_X/2), y + sample_y - (SCREEN_HEIGHT*ANTIALIASING_X/2), FOCAL_LENGTH*ANTIALIASING_X,1);
           d = camera.R * d;
-          bool intersection = ClosestIntersection(camera.position,d,triangles,closestIntersection);
-          if (intersection==true) {
-            vec3 color = calculateColor(triangles[closestIntersection.triangleIndex].color,closestIntersection, camera);
-            sum += color;
-          }
+          vec3 color = shade(camera.position,d,triangles,closestIntersection,1);
+          sum += color;
         }
       }
       sum /= ANTIALIASING_X*ANTIALIASING_X;
@@ -242,10 +280,7 @@ void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Inters
   }
 }
 
-vec4 reflection_direction(vec4 lightPos, Intersection i, vec4 normal ){
-  vec4 L = lightPos - i.position;
-  return normalize(2*glm::dot(normal,L)*normal - L);
-}
+
 
 void rotation_aroundY(Camera& camera, int dir){
   camera.yaw += dir*SENSITIVITY;
