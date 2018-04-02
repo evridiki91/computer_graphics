@@ -12,7 +12,7 @@
 
 #define DIF 0.8f
 #define SPC 0.f
-#define SPC1 0.2f
+#define SPC1 0.8f
 #define AMB 0.1f
 
 enum lightType_t { Pointlight, Spotlight, Directional};
@@ -237,8 +237,8 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	triangles.push_back( Triangle(E,A,C,yellow,DIF,SPC,AMB, Diffuse, 0) );
 
 	// TOP
-	triangles.push_back( Triangle(G,F,E,yellow,DIF,SPC,AMB, Diffuse, 0) );
-	triangles.push_back( Triangle(G,H,F,yellow,DIF,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle(G,F,E,yellow,DIF,SPC1,AMB, Reflective, 0) );
+	triangles.push_back( Triangle(G,H,F,yellow,DIF,SPC1,AMB, Reflective, 0) );
 
 	// ---------------------------------------------------------------------------
 	// Tall block
