@@ -200,8 +200,8 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	triangles.push_back( Triangle( H, F, D, green,DIF ,SPC,AMB, Diffuse, 0) );
 
 	// Ceiling
-	triangles.push_back( Triangle( E, F, G, white,DIF,SPC1,AMB, Reflective, 0) );
-	triangles.push_back( Triangle( F, H, G, white,DIF ,SPC1,AMB, Reflective, 0) );
+	triangles.push_back( Triangle( E, F, G, white,DIF,SPC1,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle( F, H, G, white,DIF ,SPC1,AMB, Diffuse, 0) );
 
 	// Back wall
 	triangles.push_back( Triangle( G, D, C, white,DIF,SPC ,AMB, Diffuse, 0) );
@@ -233,12 +233,12 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	triangles.push_back( Triangle(H,G,C,yellow,DIF,SPC,AMB, Diffuse, 0) );
 
 	// LEFT
-	triangles.push_back( Triangle(G,E,C,yellow,DIF,SPC,AMB, Diffuse, 0) );
-	triangles.push_back( Triangle(E,A,C,yellow,DIF,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle(G,E,C,yellow,DIF,SPC,AMB, Refractive, 1.6) );
+	triangles.push_back( Triangle(E,A,C,yellow,DIF,SPC,AMB, Refractive, 1.6) );
 
 	// TOP
-	triangles.push_back( Triangle(G,F,E,yellow,DIF,SPC1,AMB, Reflective, 0) );
-	triangles.push_back( Triangle(G,H,F,yellow,DIF,SPC1,AMB, Reflective, 0) );
+	triangles.push_back( Triangle(G,F,E,yellow,DIF,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle(G,H,F,yellow,DIF,SPC,AMB, Diffuse, 0) );
 
 	// ---------------------------------------------------------------------------
 	// Tall block

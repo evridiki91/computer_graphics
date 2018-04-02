@@ -219,11 +219,45 @@ vec3 DirectLight( const Intersection& i,vec4 camera ){
   return sum;
 }
 
+
+vec4 refract(const vec4 &I, const vec4 &N, const float &ior)
+{
+    float cosi = glm::clamp(glm::dot(I, N),-1.f, 1.f );
+    float etai = 1, etat = ior;
+    vec4 n = N;
+    if (cosi < 0) { cosi = -cosi; } else { std::swap(etai, etat); n= -N; }
+    float eta = etai / etat;
+    float k = 1 - eta * eta * (1 - cosi * cosi);
+    return k < 0 ? vec4(0,0,0,0) : eta * I + (eta * cosi - sqrtf(k)) * n;
+}
+
+void fresnel(const vec4 &I, const vec4 &N, const float &ior, float &kr)
+{
+    float cosi = glm::clamp(glm::dot(I, N),-1.f, 1.f);
+    float etai = 1, etat = ior;
+    if (cosi > 0) { std::swap(etai, etat); }
+    // Compute sini using Snell's law
+    float sint = etai / etat * sqrtf(std::max(0.f, 1 - cosi * cosi));
+    // Total internal reflection
+    if (sint >= 1) {
+        kr = 1;
+    }
+
+    else {
+        float cost = sqrtf(std::max(0.f, 1 - sint * sint));
+        cosi = fabsf(cosi);
+        float Rs = ((etat * cosi) - (etai * cost)) / ((etat * cosi) + (etai * cost));
+        float Rp = ((etai * cosi) - (etat * cost)) / ((etai * cosi) + (etat * cost));
+        kr = (Rs * Rs + Rp * Rp) / 2;
+    }
+    // As a consequence of the conservation of energy, transmittance is given by:
+    // kt = 1 - kr;
+}
+
 vec3 shade(vec4 start, vec4 d,std::vector<Triangle> &triangles,Intersection &closestIntersection, int depth, vec3 color){
   bool intersection = ClosestIntersection(start,d,triangles,closestIntersection);
-
+  if(depth > MAX_RECURSIVE_DEPTH) return vec3(0,0,0);
   if (intersection==true) {
-    std::cout << depth << '\n';
     switch(triangles[closestIntersection.triangleIndex].material){
       case Diffuse : {
         color += calculateColor(triangles[closestIntersection.triangleIndex].color,closestIntersection, start);
@@ -231,35 +265,34 @@ vec3 shade(vec4 start, vec4 d,std::vector<Triangle> &triangles,Intersection &clo
       }
 
       case Reflective: {
-        if(depth < MAX_RECURSIVE_DEPTH){
             //compute reflection of ray
             vec4 reflected_d = reflection_direction(d,triangles[closestIntersection.triangleIndex].normal);
             color += triangles[closestIntersection.triangleIndex].phong.ks
                     * shade(closestIntersection.position+ 0.000001f*reflected_d,reflected_d ,triangles, closestIntersection, depth+1, color);
             //vec3 shader = shade(closestIntersection.position+ 0.00001f*reflected_d,reflected_d ,triangles, closestIntersection, depth+1);
-        }
         break;
       }
       case Refractive: {
-        //Vec3f refractionColor = 0;
-        // // compute fresnel
-        // float kr;
-        // fresnel(dir, hitNormal, isect.hitObject->ior, kr);
-        // bool outside = dir.dotProduct(hitNormal) < 0;
-        // Vec3f bias = options.bias * hitNormal;
-        // // compute refraction if it is not a case of total internal reflection
-        // if (kr < 1) {
-        //     Vec3f refractionDirection = refract(dir, hitNormal, isect.hitObject->ior).normalize();
-        //     Vec3f refractionRayOrig = outside ? hitPoint - bias : hitPoint + bias;
-        //     refractionColor = castRay(refractionRayOrig, refractionDirection, objects, lights, options, depth + 1);
-        // }
-        //
-        // Vec3f reflectionDirection = reflect(dir, hitNormal).normalize();
-        // Vec3f reflectionRayOrig = outside ? hitPoint + bias : hitPoint - bias;
-        // Vec3f reflectionColor = castRay(reflectionRayOrig, reflectionDirection, objects, lights, options, depth + 1);
-        //
-        // // mix the two
-        // hitColor += reflectionColor * kr + refractionColor * (1 - kr);
+        // compute fresnel
+        float kr;
+        vec4 normal = triangles[closestIntersection.triangleIndex].normal;
+        float ior = triangles[closestIntersection.triangleIndex].ior;
+        fresnel(d, normal, ior, kr);
+        bool outside = glm::dot(d, normal) < 0;
+        vec4 bias = 0.000001f * normal;
+        vec3 Refr_color(0,0,0);
+        if (kr < 1) {
+            vec4 refractionDirection = normalize(refract(d, normal,ior));
+            vec4 refractionRayOrig = outside ? closestIntersection.position - bias : closestIntersection.position + bias;
+            Refr_color = shade(refractionRayOrig, refractionDirection, triangles, closestIntersection,  depth + 1, Refr_color);
+        }
+        vec3 Refl_color(0,0,0);
+        vec4 reflectionDirection = normalize(reflect(d, normal));
+        vec4 reflectionRayOrig = outside ? closestIntersection.position + bias : closestIntersection.position - bias;
+        Refl_color = shade(reflectionRayOrig, reflectionDirection, triangles, closestIntersection,  depth + 1, Refl_color);
+
+        // mix the two
+        color += Refl_color * kr + Refr_color * (1 - kr);
         break;
       }
 
@@ -272,6 +305,8 @@ vec3 shade(vec4 start, vec4 d,std::vector<Triangle> &triangles,Intersection &clo
   }
   else return vec3(0,0,0);
 }
+
+
 
 /*Place your drawing here*/
 void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Intersection &closestIntersection){
