@@ -15,15 +15,16 @@ using glm::mat4;
 
 
 #define SCREEN_WIDTH 320*2
-#define FOCAL_LENGTH SCREEN_WIDTH/2
 #define SCREEN_HEIGHT 320*2
+#define ANTIALIASING 2
+#define FOCAL_LENGTH SCREEN_WIDTH/2
+
 #define FULLSCREEN_MODE false
 #define SENSITIVITY 0.1f
 #define ROTATION_SENSITIVITY 0.05f
 #define LIGHT_SENSITIVITY 0.2f
 #define PI_F 3.14159265358979f
 #define LIGHT_COLOR_INTENSITY 11.f
-#define ANTIALIASING_X 2.f
 
 struct Pixel
 {
@@ -58,12 +59,15 @@ struct Light
 
 vec3 white(1,1,1);
 vector<Triangle> triangles;
-float depthBuffer[SCREEN_WIDTH][SCREEN_HEIGHT];
+float depthBuffer[SCREEN_WIDTH*ANTIALIASING][SCREEN_HEIGHT*ANTIALIASING];
+vec3 frameBuffer[SCREEN_WIDTH][SCREEN_HEIGHT];
+float shadowBuffer[SCREEN_WIDTH][SCREEN_HEIGHT];
+vec3 AABuffer[SCREEN_WIDTH*ANTIALIASING][SCREEN_HEIGHT*ANTIALIASING];
 mat4 transformation_mat;
 vec3 indirectLightPowerPerArea = 0.5f*vec3( 1, 1, 1 );
 vector<Light> lights;
 int current_light_index;
-
+float dof = 3;
 /* -------------------------------------------------
  FUNCTIONS
  ---------------------------------------------------*/
@@ -135,13 +139,16 @@ void ComputePolygonRows(const vector<Pixel>& vertexPixels,vector<Pixel>& leftPix
     vector<Pixel> interpolated_line(new_rows);
     Interpolate(vertexPixels[i],vertexPixels[j],interpolated_line);
 
-    for (int new_row_i = 0; new_row_i < new_rows; new_row_i++){
+    for (int new_row_i = 0; new_row_i < new_rows; new_row_i++)
+    {
       int row_i = interpolated_line[new_row_i].y - min_y;
 
-      if (interpolated_line[new_row_i].x > rightPixels[row_i ].x ){
+      if (interpolated_line[new_row_i].x > rightPixels[row_i ].x )
+      {
         rightPixels[row_i] = interpolated_line[new_row_i];
       }
-      if (interpolated_line[new_row_i].x < leftPixels[row_i ].x ){
+      if (interpolated_line[new_row_i].x < leftPixels[row_i ].x )
+      {
         leftPixels[row_i] = interpolated_line[new_row_i];
       }
     }
@@ -167,15 +174,16 @@ void Bresenham(Pixel a, Pixel b, vector<Pixel>& result){
   float step_zinv = (b.zinv - a.zinv)/dx;
   float zinv = a.zinv; vec4 pos3d = a.pos3d;
 
-
   int x = x0; int y = y0;
 
-  for(int i = 0; i < dx; i++) {
+  for(int i = 0; i < dx; i++)
+  {
     if(p < 0) {
       x++;
       p = p + 2 * (dy);
     }
-    else {
+    else
+    {
       x++;
       y++;
       p = p + 2 * (dy - dx);
@@ -191,11 +199,13 @@ void Bresenham(Pixel a, Pixel b, vector<Pixel>& result){
 
 void DrawPolygonRows( const vector<Pixel>& leftPixels,const vector<Pixel>& rightPixels
                 ,vec3 currentColor, vec4 normal, screen* screen, Camera& camera){
-  for (int row = 0; row < rightPixels.size(); row++){
+  for (int row = 0; row < rightPixels.size(); row++)
+  {
     vector<Pixel> pixels;
     Bresenham(leftPixels[row], rightPixels[row], pixels);
-    for (int point = 0; point < pixels.size(); point++){
-      if (pixels[point].x >= 0 && pixels[point].x < SCREEN_WIDTH && pixels[point].y >=0 && pixels[point].y < SCREEN_HEIGHT)
+    for (int point = 0; point < pixels.size(); point++)
+    {
+      if (pixels[point].x >= 0 && pixels[point].x < SCREEN_WIDTH*ANTIALIASING && pixels[point].y >=0 && pixels[point].y < SCREEN_HEIGHT*ANTIALIASING)
         PixelShader(pixels[point], screen, camera, currentColor, normal);
     }
   }
@@ -214,6 +224,114 @@ void DrawPolygon( const vector<Vertex>& vertices, vec3 currentColor, vec4 normal
   DrawPolygonRows( leftPixels, rightPixels,currentColor, normal, screen,camera);
 }
 
+vec3 calc_blur(int i, int j, int size){
+  vec3 sum(0,0,0);
+  int num = 0;
+  for (int x = -(size-1)/2; x < (size-1)/2;x++)
+  {
+    for (int y = -(size-1)/2; y < (size-1)/2;y++)
+    {
+      if (i+x >= 0 && j+y >= 0 && i+x < SCREEN_WIDTH && j+y < SCREEN_HEIGHT)
+      {
+        sum += frameBuffer[i+x][j+y];
+        num ++;
+      }
+    }
+  }
+  return sum/=num;
+}
+
+void post_processing(Camera camera){
+  vec3 processed[SCREEN_WIDTH][SCREEN_HEIGHT];
+
+  #pragma omp for
+  for (int i =0; i< SCREEN_WIDTH;i++)
+  {
+    for (int j =0; j< SCREEN_HEIGHT;j++)
+    {
+      // vec3 temp(depthBuffer[i][j]);
+      float z = abs(camera.position.z - depthBuffer[i][j]);
+      float distance = abs(dof - z);
+      if (distance <= 0.55 && distance >= 0.25 )
+      {
+        //skip dof
+        processed[i][j] = frameBuffer[i][j];
+      }
+      else {
+
+        // // //blur according to distance
+        if ((distance > 0.55 && distance <= 1 || distance <= 0.15) )
+        {
+           processed[i][j] = calc_blur(i,j,3);
+         }
+         if ((distance > 1 && distance <= 1.5) || (distance > 0.15 && distance <= 0.55) )
+         {
+           processed[i][j] = calc_blur(i,j,5);
+          }
+          if (distance > 1.5 )
+          {
+            processed[i][j] = calc_blur(i,j,15);
+           }
+        }
+    }
+  }
+  #pragma omp for
+  for (int i =0; i< SCREEN_WIDTH;i++)
+  {
+    for (int j =0; j< SCREEN_HEIGHT;j++)
+    {
+      frameBuffer[i][j] = processed[i][j];
+    }
+  }
+}
+
+
+
+void putPixels(screen* screen){
+  #pragma omp for
+  for (int i =0; i< SCREEN_WIDTH;i++)
+  {
+    for (int j =0; j< SCREEN_HEIGHT;j++)
+    {
+      // vec3 temp(depthBuffer[i][j]);
+      // std::cout << frameBuffer[i][j].x << frameBuffer[i][j].y << frameBuffer[i][j].z << '\n';
+      PutPixelSDL(screen, i, j, frameBuffer[i][j]);
+    }
+  }
+}
+
+void putPixelsAA(screen* screen){
+  #pragma omp for
+  for (int i =0; i< SCREEN_WIDTH*ANTIALIASING;i++)
+  {
+    for (int j =0; j< SCREEN_HEIGHT*ANTIALIASING;j++)
+    {
+      // vec3 temp(depthBuffer[i][j]);
+      // std::cout << frameBuffer[i][j].x << frameBuffer[i][j].y << frameBuffer[i][j].z << '\n';
+      PutPixelSDL(screen, i, j, AABuffer[i][j]);
+    }
+  }
+}
+
+
+void antialiasing(){
+
+  for( int x=0; x<SCREEN_WIDTH*ANTIALIASING; x+=ANTIALIASING ){
+    int truex =(x/ANTIALIASING);
+    for( int y=0; y<SCREEN_WIDTH*ANTIALIASING; y+=ANTIALIASING ){
+      int truey = (y/ANTIALIASING);
+      vec3 sum(0,0,0);
+      for (int sample_x = 0; sample_x < ANTIALIASING; sample_x++ )
+      {
+        for (int sample_y = 0 ; sample_y < ANTIALIASING; sample_y++ )
+        {
+          sum += AABuffer[sample_x+x][sample_y+y];
+        }
+      }
+      frameBuffer[truex][truey] = sum/float(ANTIALIASING*ANTIALIASING);
+    }
+  }
+}
 
 
 int main( int argc, char* argv[] )
@@ -222,6 +340,7 @@ int main( int argc, char* argv[] )
   current_light_index = 0;
   Camera camera;
   initialize_camera(camera);
+  // screen *screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN_MODE );
   screen *screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN_MODE );
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
   LoadTestModel(triangles);
@@ -229,13 +348,15 @@ int main( int argc, char* argv[] )
       Update(camera);
       SDL_Renderframe(screen);
       Draw(screen,camera);
+      antialiasing();
+      post_processing(camera);
+      putPixels(screen);
   }
 
   SDL_SaveImage( screen, "screenshot.bmp" );
   KillSDL(screen);
   return 0;
 }
-
 
 // void DrawTriangles(vector<Triangle> triangles, screen* screen, Camera& camera){
 //   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
@@ -256,8 +377,22 @@ void Draw(screen* screen, Camera& camera )
   //clear depth
 
   for( int y=0; y<SCREEN_HEIGHT; ++y )
+  {
     for( int x=0; x<SCREEN_WIDTH; ++x )
-      depthBuffer[x][y] = 0;
+    {
+      frameBuffer[x][y] = vec3(0,0,0);
+    }
+  }
+
+  for( int y=0; y<SCREEN_HEIGHT*ANTIALIASING; ++y )
+  {
+    for( int x=0; x<SCREEN_WIDTH*ANTIALIASING; ++x )
+    {
+      depthBuffer[x][y] = 0.f;
+      AABuffer[x][y] = vec3(0,0,0);
+    }
+  }
+
 
   /* Clear buffer */
   #pragma omp parallel for
@@ -273,8 +408,8 @@ void Draw(screen* screen, Camera& camera )
 void VertexShader( const Vertex& v, Pixel& p, Camera& camera ){
   vec4 p_origin = v.position - camera.position;
   vec4 pixel = p_origin*camera.R;
-  p.x = FOCAL_LENGTH*pixel.x/pixel.z + SCREEN_WIDTH/2;
-  p.y = FOCAL_LENGTH*pixel.y/pixel.z + SCREEN_HEIGHT/2;
+  p.x = FOCAL_LENGTH*ANTIALIASING*pixel.x/pixel.z + SCREEN_WIDTH*ANTIALIASING/2;
+  p.y = FOCAL_LENGTH*ANTIALIASING*pixel.y/pixel.z + SCREEN_HEIGHT*ANTIALIASING/2;
   p.zinv = 1.f/pixel.z;
   p.z = pixel.z;
   p.pos3d = v.position*p.zinv;
@@ -290,11 +425,12 @@ void PixelShader(const Pixel& p, screen* screen,Camera& camera, vec3 currentColo
   {
     depthBuffer[x][y] = p.zinv;
     vec3 directlight = vec3(0,0,0);
-    for (size_t i = 0; i < lights.size(); i++) {
+    for (size_t i = 0; i < lights.size(); i++)
+     {
       directlight += directLight(i,currentNormal,p,camera);
     }
     vec3 illumination = currentColor * (directlight +  indirectLightPowerPerArea);
-    PutPixelSDL( screen, x, y, illumination);
+    AABuffer[x][y] = illumination;
   }
 }
 
@@ -309,7 +445,8 @@ void Interpolate( Pixel a, Pixel b, vector<Pixel>& result ){
   vec3 current = vec3(a.x,a.y,a.zinv);
   vec4 current_pos3d = a.pos3d;
 
-  for( int i=0; i<N; ++i ) {
+  for( int i=0; i<N; ++i )
+  {
     result[i].x = current.x;
     result[i].y = current.y;
     result[i].zinv = current.z;
@@ -327,8 +464,10 @@ void DrawLineSDL( screen* screen, Pixel a, Pixel b, vec3 color ){
   uint32_t pixels = glm::max( deltax, deltay ) + 1;
   vector<Pixel> line( pixels ); //get the pixel positions of the line
   Interpolate( a, b, line );
-  for (uint32_t i = 0; i < pixels; i++){
-    if (line[i].x >= 0 && line[i].x < SCREEN_WIDTH && line[i].y >=0 && line[i].y < SCREEN_HEIGHT){
+  for (uint32_t i = 0; i < pixels; i++)
+  {
+    if (line[i].x >= 0 && line[i].x < SCREEN_WIDTH && line[i].y >=0 && line[i].y < SCREEN_HEIGHT)
+    {
       PutPixelSDL(screen,line[i].x,line[i].y,color);
     }
   }
@@ -353,47 +492,58 @@ void Update(Camera& camera)
   vec4 forward(transformation_mat[2][0], transformation_mat[2][1], transformation_mat[2][2], 1 );
 
   const uint8_t* keystate = SDL_GetKeyboardState(NULL);
-  if(keystate[SDL_SCANCODE_UP]){
+  if(keystate[SDL_SCANCODE_UP])
+  {
     camera.position.z += SENSITIVITY;
     TransformationMatrix(transformation_mat,camera);
   }
-  else if(keystate[SDL_SCANCODE_DOWN]){
+  else if(keystate[SDL_SCANCODE_DOWN])
+  {
     camera.position.z -= SENSITIVITY;
     TransformationMatrix(transformation_mat,camera);
   }
-  else if(keystate[SDL_SCANCODE_RIGHT]){
+  else if(keystate[SDL_SCANCODE_RIGHT])
+  {
     camera.yaw  -= ROTATION_SENSITIVITY;
     TransformationMatrix(transformation_mat, camera);
   }
-  else if(keystate[SDL_SCANCODE_LEFT]){
+  else if(keystate[SDL_SCANCODE_LEFT])
+  {
     camera.yaw  += ROTATION_SENSITIVITY;
     TransformationMatrix(transformation_mat, camera);
   }
 
-  else if(keystate[SDL_SCANCODE_W]){
+  else if(keystate[SDL_SCANCODE_W])
+  {
     lights[current_light_index].pos += forward*LIGHT_SENSITIVITY;
   }
-  else if(keystate[SDL_SCANCODE_S]){
+  else if(keystate[SDL_SCANCODE_S])
+  {
     lights[current_light_index].pos -= forward*LIGHT_SENSITIVITY;
   }
-  else if (keystate[SDL_SCANCODE_D]){
+  else if (keystate[SDL_SCANCODE_D])
+  {
     lights[current_light_index].pos += right*LIGHT_SENSITIVITY;
 
   }
-  else if (keystate[SDL_SCANCODE_A]){
+  else if (keystate[SDL_SCANCODE_A])
+  {
     lights[current_light_index].pos -= right*LIGHT_SENSITIVITY;
   }
-  else if (keystate[SDL_SCANCODE_C]){
+  else if (keystate[SDL_SCANCODE_C])
+  {
     current_light_index = (current_light_index + 1 ) % lights.size();
   }
-  else if (keystate[SDL_SCANCODE_O]){
+  else if (keystate[SDL_SCANCODE_O])
+  {
     initLights();
   }
 
 }
 
 //yaw - y
-mat4 yaw_rotation(Camera& camera){
+mat4 yaw_rotation(Camera& camera)
+{
   vec4 v1(cos(camera.yaw), 0, sin(camera.yaw),0);
   vec4 v2(0,1,0,0);
   vec4 v3(-sin(camera.yaw), 0, cos(camera.yaw),0);
@@ -402,7 +552,8 @@ mat4 yaw_rotation(Camera& camera){
 }
 
 //roll - z
-mat4 roll_rotation(Camera& camera){
+mat4 roll_rotation(Camera& camera)
+{
   vec4 v1(cos(camera.roll), -sin(camera.roll), 0 ,0);
   vec4 v2(sin(camera.roll),cos(camera.roll),0,0);
   vec4 v3(0, 0, 1,0);
@@ -411,7 +562,8 @@ mat4 roll_rotation(Camera& camera){
 }
 
 //pitch - x
-mat4 pitch_rotation(Camera& camera){
+mat4 pitch_rotation(Camera& camera)
+{
   vec4 v1(1, 0, 0,0);
   vec4 v2(0,cos(camera.pitch),-sin(camera.pitch),0);
   vec4 v3(0, sin(camera.pitch), cos(camera.pitch),0);
@@ -419,7 +571,8 @@ mat4 pitch_rotation(Camera& camera){
   return mat4(v1,v2,v3,v4);
 }
 
-void TransformationMatrix(glm::mat4 &M, Camera& camera){
+void TransformationMatrix(glm::mat4 &M, Camera& camera)
+{
   mat4 c = mat4(1.0);
   mat4 c_minus = mat4(1.0);
   for(int i = 0; i < 4 ; i++) {
@@ -436,7 +589,8 @@ void TransformationMatrix(glm::mat4 &M, Camera& camera){
 }
 
 
-void initialize_camera(Camera &camera){
+void initialize_camera(Camera &camera)
+{
   camera.position = vec4( 0, 0, -2.1,1 );
   camera.yaw = 0;
   camera.pitch = 0;
@@ -445,7 +599,8 @@ void initialize_camera(Camera &camera){
   TransformationMatrix(transformation_mat ,camera );
 }
 
-void initLights(){
+void initLights()
+{
   vec4 lightPos( 0, -0.5, -0.7, 1.0 );
   vec3 lightPower = LIGHT_COLOR_INTENSITY*vec3( 1, 1, 1 );
   Light light;
@@ -454,7 +609,8 @@ void initLights(){
   lights.push_back(light);
 }
 
-void initialize_vertices( vector<Vertex>& vertices, Triangle triangle){
+void initialize_vertices( vector<Vertex>& vertices, Triangle triangle)
+{
   vertices[0].position = triangle.v0;
   vertices[1].position = triangle.v1;
   vertices[2].position = triangle.v2;
