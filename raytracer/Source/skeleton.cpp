@@ -357,7 +357,6 @@ void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Inters
           vec4 d(x + sample_x - (SCREEN_WIDTH*ANTIALIASING_X/2), y + sample_y - (SCREEN_HEIGHT*ANTIALIASING_X/2), FOCAL_LENGTH*ANTIALIASING_X,1);
           d = camera.R * d;
           vec3 initial_color(0,0,0);
-
           vec3 color = shade(camera.position,d,triangles,closestIntersection,1,initial_color);
           sum += color;
         }
@@ -487,7 +486,6 @@ void Update(Camera &camera)
   {
     light_selection = (light_selection + 1 ) % lights.size();
   }
-  Focal_ = Length(lookAtPoint – eyePoint)
 
 }
 
