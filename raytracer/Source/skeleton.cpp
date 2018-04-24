@@ -14,7 +14,8 @@ using glm::mat3;
 using glm::vec4;
 using glm::mat4;
 
-struct Camera {
+struct Camera
+{
   vec4 position;
   mat4 R; //rotation
   float yaw; //angle for rotating around y-axis
@@ -22,7 +23,8 @@ struct Camera {
   float roll;
 };
 
-struct Intersection {
+struct Intersection
+{
   vec4 position;
   float distance;
   int triangleIndex;
@@ -58,7 +60,8 @@ vec3 black(0.0,0.0,0.0);
 
 /* ----------------------------------------------------------------------------*/
 /* FUNCTIONS PROTOTYPES                                                        */
-vec3 IndirectLight(){
+vec3 IndirectLight()
+{
   return INDIRECT_LIGHT_INTENSITY*vec3( 1, 1, 1 );
 }
 void Update(Camera &camera);
@@ -89,17 +92,22 @@ int main( int argc, char* argv[] )
 
   Intersection closestIntersection;
   //Initialize triangles
-  if (argc <= 1) {
+  if (argc <= 1)
+  {
     printf("Enter model to be loaded\n");
     return 1;
   }
 
-  else {
-    if (std::string(argv[1]) == "test"){
+  else
+  {
+    if (std::string(argv[1]) == "test")
+    {
       LoadTestModel(triangles);
     }
-    else {
-      if (!loadObj(std::string(argv[1]),triangles,white)) {
+    else
+    {
+      if (!loadObj(std::string(argv[1]),triangles,white))
+      {
         printf("Can't load file\n");
         return 1;
       }
@@ -109,7 +117,8 @@ int main( int argc, char* argv[] )
     }
   }
 
-  while( NoQuitMessageSDL() ){
+  while( NoQuitMessageSDL() )
+  {
       Update(camera);
       Draw(screen,camera,triangles,closestIntersection);
       SDL_Renderframe(screen);
@@ -126,7 +135,8 @@ int main( int argc, char* argv[] )
 /* INITIALISERS                                                                   */
 /* ----------------------------------------------------------------------------*/
 
-void initLights(){
+void initLights()
+{
   vec4 lightPos( 0, 0, -1.5, 1.0 );
 
   Light light(lightPos,
@@ -137,7 +147,8 @@ void initLights(){
   lights.push_back(light);
 }
 
-void initialize_camera(Camera &camera){
+void initialize_camera(Camera &camera)
+{
   camera.position = vec4(0,0,-2,0);
   camera.yaw = 0;
   camera.pitch = 0;
@@ -149,7 +160,8 @@ void initialize_camera(Camera &camera){
 /* CALCULATE DIRECT AND INDIRECT LIGHT CONTRIBUTION AND COLOR                                                                   */
 /* ----------------------------------------------------------------------------*/
 
-vec3 calculateColor(vec3 color,const Intersection& i, vec4 camera ){
+vec3 calculateColor(vec3 color,const Intersection& i, vec4 camera )
+{
   vec3 D = DirectLight(i, camera);
   vec3 I = IndirectLight();
   return color*(D+I);
@@ -159,7 +171,8 @@ vec3 calculateColor(vec3 color,const Intersection& i, vec4 camera ){
 /* LIGHT INTENSITY CALCULATION FOR                                             */
 /* ----------------------------------------------------------------------------*/
 
-vec3 pointLight(const Intersection& i, int n, vec4 n_hat, vec4 camera){
+vec3 pointLight(const Intersection& i, int n, vec4 n_hat, vec4 camera)
+{
 
   vec4 lightPos = lights[n].pos;
   vec3 intensity_light = lights[n].intensity;
@@ -169,7 +182,9 @@ vec3 pointLight(const Intersection& i, int n, vec4 n_hat, vec4 camera){
 
   Intersection shadows_intersection;
   bool inter = ClosestIntersection(i.position + 0.00001f*r_hat ,r_hat,triangles,shadows_intersection);
-  if (inter && (shadows_intersection.distance < r ) ){
+
+  if (inter && (shadows_intersection.distance < r ) )
+  {
     return vec3(0,0,0);
   }
 
@@ -189,19 +204,23 @@ vec3 pointLight(const Intersection& i, int n, vec4 n_hat, vec4 camera){
   return D;
 }
 
-vec4 reflection_direction(vec4 inter, vec4 normal ){
+vec4 reflection_direction(vec4 inter, vec4 normal )
+{
   return (inter - 2*glm::dot(inter,normal)*normal );
 }
+
 /* ----------------------------------------------------------------------------*/
 /* DIRECT LIGHT CONTRIBUTION                                                                    */
 /* ----------------------------------------------------------------------------*/
 
-vec3 DirectLight( const Intersection& i,vec4 camera ){
+vec3 DirectLight( const Intersection& i,vec4 camera )
+{
   Triangle triangle = triangles[i.triangleIndex];
   vec4 n_hat = (triangle.normal);
   vec3 sum(0,0,0);
 
-  for (size_t n = 0; n < lights.size(); n++){
+  for (size_t n = 0; n < lights.size(); n++)
+  {
     vec3 D(0,0,0);
     //function for different lights?
     switch (lights[n].lightType){
@@ -239,40 +258,44 @@ void fresnel(const vec4 &I, const vec4 &N, const float &ior, float &kr)
     // Compute sini using Snell's law
     float sint = etai / etat * sqrtf(std::max(0.f, 1 - cosi * cosi));
     // Total internal reflection
-    if (sint >= 1) {
+    if (sint >= 1)
+    {
         kr = 1;
     }
 
-    else {
+    else
+    {
         float cost = sqrtf(std::max(0.f, 1 - sint * sint));
         cosi = fabsf(cosi);
         float Rs = ((etat * cosi) - (etai * cost)) / ((etat * cosi) + (etai * cost));
         float Rp = ((etai * cosi) - (etat * cost)) / ((etai * cosi) + (etat * cost));
         kr = (Rs * Rs + Rp * Rp) / 2;
     }
-    // As a consequence of the conservation of energy, transmittance is given by:
-    // kt = 1 - kr;
 }
 
 vec3 shade(vec4 start, vec4 d,std::vector<Triangle> &triangles,Intersection &closestIntersection, int depth, vec3 color){
   bool intersection = ClosestIntersection(start,d,triangles,closestIntersection);
   if(depth > MAX_RECURSIVE_DEPTH) return vec3(0,0,0);
-  if (intersection==true) {
-    switch(triangles[closestIntersection.triangleIndex].material){
-      case Diffuse : {
+  if (intersection==true)
+  {
+    switch(triangles[closestIntersection.triangleIndex].material)
+    {
+      case Diffuse :
+      {
         color += calculateColor(triangles[closestIntersection.triangleIndex].color,closestIntersection, start);
         break;
       }
 
-      case Reflective: {
+      case Reflective:
+      {
             //compute reflection of ray
             vec4 reflected_d = reflection_direction(d,triangles[closestIntersection.triangleIndex].normal);
             color += triangles[closestIntersection.triangleIndex].phong.ks
                     * shade(closestIntersection.position+ 0.000001f*reflected_d,reflected_d ,triangles, closestIntersection, depth+1, color);
-            //vec3 shader = shade(closestIntersection.position+ 0.00001f*reflected_d,reflected_d ,triangles, closestIntersection, depth+1);
-        break;
+            break;
       }
-      case Refractive: {
+      case Refractive:
+      {
         // compute fresnel
         float kr;
         vec4 normal = triangles[closestIntersection.triangleIndex].normal;
@@ -281,11 +304,14 @@ vec3 shade(vec4 start, vec4 d,std::vector<Triangle> &triangles,Intersection &clo
         bool outside = glm::dot(d, normal) < 0;
         vec4 bias = 0.000001f * normal;
         vec3 Refr_color(0,0,0);
+
         if (kr < 1) {
             vec4 refractionDirection = normalize(refract(d, normal,ior));
             vec4 refractionRayOrig = outside ? closestIntersection.position - bias : closestIntersection.position + bias;
             Refr_color = shade(refractionRayOrig, refractionDirection, triangles, closestIntersection,  depth + 1, Refr_color);
         }
+
+
         vec3 Refl_color(0,0,0);
         vec4 reflectionDirection = normalize(reflect(d, normal));
         vec4 reflectionRayOrig = outside ? closestIntersection.position + bias : closestIntersection.position - bias;
@@ -296,7 +322,8 @@ vec3 shade(vec4 start, vec4 d,std::vector<Triangle> &triangles,Intersection &clo
         break;
       }
 
-      default: {
+      default:
+      {
         std::cout << "Something went poopoos" << '\n';
         break;
       }
@@ -313,16 +340,24 @@ void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Inters
   /* Clear buffer */
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
 
-  for(int x = 0; x < SCREEN_WIDTH*ANTIALIASING_X; x+=int(ANTIALIASING_X)){
+  for(int x = 0; x < SCREEN_WIDTH*ANTIALIASING_X; x+=int(ANTIALIASING_X))
+  {
     int truex =(x/ANTIALIASING_X);
-    for(int y = 0; y < SCREEN_HEIGHT*ANTIALIASING_X; y+=int(ANTIALIASING_X)){
+
+    for(int y = 0; y < SCREEN_HEIGHT*ANTIALIASING_X; y+=int(ANTIALIASING_X))
+    {
       int truey = (y/ANTIALIASING_X);
       vec3 sum(0,0,0);
-      for (int sample_x = 0; sample_x < ANTIALIASING_X; sample_x++ ){
-        for (int sample_y = 0 ; sample_y < ANTIALIASING_X; sample_y++ ){
+
+      for (int sample_x = 0; sample_x < ANTIALIASING_X; sample_x++ )
+      {
+        for (int sample_y = 0 ; sample_y < ANTIALIASING_X; sample_y++ )
+        {
+
           vec4 d(x + sample_x - (SCREEN_WIDTH*ANTIALIASING_X/2), y + sample_y - (SCREEN_HEIGHT*ANTIALIASING_X/2), FOCAL_LENGTH*ANTIALIASING_X,1);
           d = camera.R * d;
           vec3 initial_color(0,0,0);
+
           vec3 color = shade(camera.position,d,triangles,closestIntersection,1,initial_color);
           sum += color;
         }
@@ -335,7 +370,8 @@ void Draw(screen* screen,Camera &camera, std::vector<Triangle> &triangles,Inters
 
 
 
-void rotation_aroundY(Camera& camera, int dir){
+void rotation_aroundY(Camera& camera, int dir)
+{
   camera.yaw += dir*SENSITIVITY;
   vec4 v1(cos(camera.yaw), 0, sin(camera.yaw),0);
   vec4 v2(0,1,0,0);
@@ -344,7 +380,8 @@ void rotation_aroundY(Camera& camera, int dir){
   camera.R = mat4(v1,v2,v3,v4);
 }
 //roll
-void rotation_aroundZ(Camera& camera, int dir){
+void rotation_aroundZ(Camera& camera, int dir)
+{
   camera.roll += dir*SENSITIVITY;
   vec4 v1(cos(camera.roll), -sin(camera.roll), 0 ,0);
   vec4 v2(sin(camera.roll),cos(camera.roll),0,0);
@@ -354,7 +391,8 @@ void rotation_aroundZ(Camera& camera, int dir){
 }
 
 //pitch
-void rotation_aroundX(Camera& camera, int dir){
+void rotation_aroundX(Camera& camera, int dir)
+{
   camera.pitch += dir*SENSITIVITY;
   vec4 v1(1, 0, 0,0);
   vec4 v2(0,cos(camera.pitch),-sin(camera.pitch),0);
@@ -379,63 +417,83 @@ void Update(Camera &camera)
   std::cout << "Render time: " << dt << " ms." << std::endl;
   /* Update variables*/
   const uint8_t* keystate = SDL_GetKeyboardState(NULL);
-  if(keystate[SDL_SCANCODE_UP]){
+  if(keystate[SDL_SCANCODE_UP])
+  {
     camera.position.z += SENSITIVITY;
   }
-  else if(keystate[SDL_SCANCODE_DOWN]){
+  else if(keystate[SDL_SCANCODE_DOWN])
+  {
     camera.position.z -= SENSITIVITY;
   }
-  else if(keystate[SDL_SCANCODE_LEFT]){
+  else if(keystate[SDL_SCANCODE_LEFT])
+  {
     rotation_aroundY(camera,1);
   }
-  else if(keystate[SDL_SCANCODE_RIGHT]){
+  else if(keystate[SDL_SCANCODE_RIGHT])
+  {
     rotation_aroundY(camera,-1);
   }
-  else if(keystate[SDL_SCANCODE_W]){
+  else if(keystate[SDL_SCANCODE_W])
+  {
     lights[light_selection].pos += forward*LIGHT_SENSITIVITY;
   }
-  else if(keystate[SDL_SCANCODE_S]){
+  else if(keystate[SDL_SCANCODE_S])
+  {
     lights[light_selection].pos -= forward*LIGHT_SENSITIVITY;
   }
-  else if(keystate[SDL_SCANCODE_A]){
+  else if(keystate[SDL_SCANCODE_A])
+  {
       lights[light_selection].pos -= right*LIGHT_SENSITIVITY;
   }
-  else if(keystate[SDL_SCANCODE_D]){
+  else if(keystate[SDL_SCANCODE_D])
+  {
       lights[light_selection].pos += right*LIGHT_SENSITIVITY;
   }
-  else if (keystate[SDL_SCANCODE_I]){
+  else if (keystate[SDL_SCANCODE_I])
+  {
     rotation_aroundX(camera,-1);
   }
-  else if (keystate[SDL_SCANCODE_O]){
+  else if (keystate[SDL_SCANCODE_O])
+  {
     initLights();
   }
 
-  else if (keystate[SDL_SCANCODE_K]){
+  else if (keystate[SDL_SCANCODE_K])
+  {
     rotation_aroundX(camera,1);
-
   }
-  else if (keystate[SDL_SCANCODE_J]){
+
+  else if (keystate[SDL_SCANCODE_J])
+  {
     rotation_aroundZ(camera,1);
-
   }
-  else if (keystate[SDL_SCANCODE_L]){
+
+  else if (keystate[SDL_SCANCODE_L])
+  {
     rotation_aroundZ(camera,-1);
-
   }
-  else if (keystate[SDL_SCANCODE_B]){
+
+  else if (keystate[SDL_SCANCODE_B])
+  {
     camera.position.x -= SENSITIVITY; //Camera moves to the left
   }
-  else if (keystate[SDL_SCANCODE_V]){
+
+  else if (keystate[SDL_SCANCODE_V])
+  {
     camera.position.x += SENSITIVITY; //Camera moves to the left
   }
-  else if (keystate[SDL_SCANCODE_C]){
+
+  else if (keystate[SDL_SCANCODE_C])
+  {
     light_selection = (light_selection + 1 ) % lights.size();
   }
+  Focal_ = Length(lookAtPoint – eyePoint)
 
 }
 
 bool ClosestIntersection(vec4 start,vec4 dir, const vector<Triangle>& triangles,
-                         Intersection& closestIntersection ){
+                         Intersection& closestIntersection )
+                         {
   bool flag = false;
   closestIntersection.distance = std::numeric_limits<float>::max();
   mat3 A;
@@ -459,8 +517,8 @@ bool ClosestIntersection(vec4 start,vec4 dir, const vector<Triangle>& triangles,
     float u = x.y;
     float v = x.z;
 
-    //Otan valume = fevgun oi mavres grammes
-    if(u >= 0 && v >= 0 && (u + v) <= 1 && t >= 0 && t < closestIntersection.distance){
+    if(u >= 0 && v >= 0 && (u + v) <= 1 && t >= 0 && t < closestIntersection.distance)
+    {
         if (flag == false) flag = true;
         closestIntersection.triangleIndex = i;
         closestIntersection.distance = t;
