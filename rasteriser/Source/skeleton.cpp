@@ -14,9 +14,9 @@ using glm::vec4;
 using glm::mat4;
 
 
-#define SCREEN_WIDTH 320*2
-#define SCREEN_HEIGHT 320*2
-#define ANTIALIASING 2
+#define SCREEN_WIDTH 320
+#define SCREEN_HEIGHT 320
+#define ANTIALIASING 1
 #define FOCAL_LENGTH SCREEN_WIDTH/2
 
 #define FULLSCREEN_MODE false
@@ -24,7 +24,13 @@ using glm::mat4;
 #define ROTATION_SENSITIVITY 0.05f
 #define LIGHT_SENSITIVITY 0.2f
 #define PI_F 3.14159265358979f
-#define LIGHT_COLOR_INTENSITY 11.f
+#define LIGHT_COLOR_INTENSITY 10.f
+
+#define DIFFUSE_COLOR  1.f
+#define SPECULAR_COLOR 0.2f
+#define AMBIENT_INTENSITY 0.1f
+#define SHINY_FACTOR 15.f
+#define INDIRECT_LIGHT_INTENSITY 0.3f
 
 struct Pixel
 {
@@ -49,25 +55,18 @@ struct Vertex
   vec4 position;
 };
 
-struct Light
-{
-  glm::vec4 pos;
-	vec3 color;
-	//lightType_t lightType;
-};
-
-
 vec3 white(1,1,1);
 vector<Triangle> triangles;
 float depthBuffer[SCREEN_WIDTH*ANTIALIASING][SCREEN_HEIGHT*ANTIALIASING];
 vec3 frameBuffer[SCREEN_WIDTH][SCREEN_HEIGHT];
-float shadowBuffer[SCREEN_WIDTH][SCREEN_HEIGHT];
+float shadowMap[SCREEN_WIDTH][SCREEN_HEIGHT];
 vec3 AABuffer[SCREEN_WIDTH*ANTIALIASING][SCREEN_HEIGHT*ANTIALIASING];
 mat4 transformation_mat;
 vec3 indirectLightPowerPerArea = 0.5f*vec3( 1, 1, 1 );
 vector<Light> lights;
 int current_light_index;
 float dof = 3;
+int dof_enabled = false;
 /* -------------------------------------------------
  FUNCTIONS
  ---------------------------------------------------*/
@@ -82,26 +81,37 @@ void VertexShader( const Vertex& vertices, Pixel& p, Camera& camera );
 void Interpolate( Pixel a, Pixel b, vector<Pixel>& result );
 void DrawLineSDL( screen* screen, Pixel a, Pixel b, vec3 color );
 void DrawPolygonEdges( vector<Vertex>& vertices,screen* screen, Camera &camera );
-void PixelShader(const Pixel& p, screen* screen,Camera& camera, vec3 currentColor, vec4 currentNormal);
+void PixelShader(const Pixel& p, screen* screen,Camera& camera, vec3 currentColor, vec4 currentNormal, Phong phong);
 void initialize_vertices( vector<Vertex>& vertices, Triangle triangle);
-void DrawPolygon(const vector<Vertex>& vertices, vec3 currentColor, vec4 normal,screen* screen, Camera& camera );
+void DrawPolygon(const vector<Vertex>& vertices, vec3 currentColor, vec4 normal,screen* screen, Camera& camera, Phong phong );
 void ComputePolygonRows(const vector<Pixel>& vertexPixels,vector<Pixel>& leftPixels,vector<Pixel>& rightPixels );
 void DrawPolygonRows( const vector<Pixel>& leftPixels,const vector<Pixel>& rightPixels
-                ,vec3 currentColor, vec4 normal, screen* screen, Camera& camera);
+                ,vec3 currentColor, vec4 normal, screen* screen, Camera& camera, Phong phong);
 
 /******************************************************************************************/
 
-vec3 directLight( int n, vec4 normal, Pixel pixel, Camera &camera){
+vec3 directLight( int n, vec4 normal, Pixel pixel, Camera &camera, Phong phong){
 
   vec4 lightPos = lights[n].pos;
-  vec3 power = lights[n].color;
+  vec3 power = lights[n].intensity;
   float r = glm::distance(lightPos, pixel.pos3d);//DISTANCE
   vec4 r_hat = glm::normalize(lightPos - pixel.pos3d);//DIRECTION of light
   float dotProduct = glm::dot(normal,r_hat);
-  float diff_intensity = std::max(dotProduct,(0.0f));
+
+  float diffuse_term = std::max(dotProduct,(0.0f));
   vec3 attenuation = power / (4*PI_F*r*r); //colour light / distance
-  vec3 total =  diff_intensity*attenuation;
-  return total;
+
+  vec4 viewDir = normalize(-camera.position);
+
+  vec4 H = normalize(r_hat + viewDir );
+  float spec_intensity = std::max(glm::dot(normal,H),(0.0f));
+
+  vec3 diffuse = attenuation * diffuse_term * phong.kd ;
+  vec3 specular = attenuation * pow(spec_intensity,SHINY_FACTOR)*phong.ks;
+  vec3 ambient  =  lights[n].diffuse_color * phong.ka;
+  vec3 D = diffuse*lights[n].diffuse_color + specular*lights[n].specular_color + ambient;
+  D = clamp(D,vec3(0,0,0),vec3(1,1,1));
+    return D;
 }
 
 
@@ -155,9 +165,6 @@ void ComputePolygonRows(const vector<Pixel>& vertexPixels,vector<Pixel>& leftPix
   }
 }
 
-
-
-
 void Bresenham(Pixel a, Pixel b, vector<Pixel>& result){
 
   float x0 = a.x; float x1 = b.x;
@@ -198,7 +205,7 @@ void Bresenham(Pixel a, Pixel b, vector<Pixel>& result){
 
 
 void DrawPolygonRows( const vector<Pixel>& leftPixels,const vector<Pixel>& rightPixels
-                ,vec3 currentColor, vec4 normal, screen* screen, Camera& camera){
+                ,vec3 currentColor, vec4 normal, screen* screen, Camera& camera, Phong phong ){
   for (int row = 0; row < rightPixels.size(); row++)
   {
     vector<Pixel> pixels;
@@ -206,13 +213,13 @@ void DrawPolygonRows( const vector<Pixel>& leftPixels,const vector<Pixel>& right
     for (int point = 0; point < pixels.size(); point++)
     {
       if (pixels[point].x >= 0 && pixels[point].x < SCREEN_WIDTH*ANTIALIASING && pixels[point].y >=0 && pixels[point].y < SCREEN_HEIGHT*ANTIALIASING)
-        PixelShader(pixels[point], screen, camera, currentColor, normal);
+        PixelShader(pixels[point], screen, camera, currentColor, normal, phong);
     }
   }
 }
 
 
-void DrawPolygon( const vector<Vertex>& vertices, vec3 currentColor, vec4 normal,screen* screen, Camera& camera )
+void DrawPolygon( const vector<Vertex>& vertices, vec3 currentColor, vec4 normal,screen* screen, Camera& camera, Phong phong )
 {
   int V = vertices.size();
   vector<Pixel> vertexPixels( V );
@@ -221,7 +228,7 @@ void DrawPolygon( const vector<Vertex>& vertices, vec3 currentColor, vec4 normal
   vector<Pixel> leftPixels;
   vector<Pixel> rightPixels;
   ComputePolygonRows( vertexPixels, leftPixels, rightPixels );
-  DrawPolygonRows( leftPixels, rightPixels,currentColor, normal, screen,camera);
+  DrawPolygonRows( leftPixels, rightPixels,currentColor, normal, screen,camera, phong);
 }
 
 vec3 calc_blur(int i, int j, int size){
@@ -260,7 +267,7 @@ void post_processing(Camera camera){
       else {
 
         // // //blur according to distance
-        if ((distance > 0.55 && distance <= 1 || distance <= 0.15) )
+        if ((distance > 0.55 && distance <= 1) || distance <= 0.15 )
         {
            processed[i][j] = calc_blur(i,j,3);
          }
@@ -275,7 +282,7 @@ void post_processing(Camera camera){
         }
     }
   }
-  #pragma omp for
+
   for (int i =0; i< SCREEN_WIDTH;i++)
   {
     for (int j =0; j< SCREEN_HEIGHT;j++)
@@ -284,7 +291,6 @@ void post_processing(Camera camera){
     }
   }
 }
-
 
 
 void putPixels(screen* screen){
@@ -334,6 +340,14 @@ void antialiasing(){
 }
 
 
+void lookAtLight(Camera &camera)
+{
+  int i;
+  camera.position += vec4(0,0,0,0);
+  camera.pitch = 1.57079633;
+  TransformationMatrix(transformation_mat,camera);
+}
+
 int main( int argc, char* argv[] )
 {
   initLights();
@@ -344,15 +358,15 @@ int main( int argc, char* argv[] )
   screen *screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN_MODE );
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
   LoadTestModel(triangles);
+  lookAtLight(camera);
   while( NoQuitMessageSDL() ){
       Update(camera);
       SDL_Renderframe(screen);
       Draw(screen,camera);
       antialiasing();
-      post_processing(camera);
+      if (dof_enabled) post_processing(camera);
       putPixels(screen);
   }
-
   SDL_SaveImage( screen, "screenshot.bmp" );
   KillSDL(screen);
   return 0;
@@ -395,13 +409,14 @@ void Draw(screen* screen, Camera& camera )
 
 
   /* Clear buffer */
-  #pragma omp parallel for
+
   for( uint32_t i=0; i<triangles.size(); ++i ){
     vector<Vertex> vertices(3);
     initialize_vertices(vertices,triangles[i]);
     vec3 currentColor = triangles[i].color;
     vec4 currentNormal = triangles[i].normal;
-    DrawPolygon( vertices,currentColor,currentNormal,screen,camera );
+    Phong phong = triangles[i].phong;
+    DrawPolygon( vertices,currentColor,currentNormal,screen,camera,phong );
   }
 }
 
@@ -416,7 +431,7 @@ void VertexShader( const Vertex& v, Pixel& p, Camera& camera ){
 }
 
 
-void PixelShader(const Pixel& p, screen* screen,Camera& camera, vec3 currentColor, vec4 currentNormal)
+void PixelShader(const Pixel& p, screen* screen,Camera& camera, vec3 currentColor, vec4 currentNormal,Phong phong)
 {
   int x = p.x;
   int y = p.y;
@@ -427,9 +442,10 @@ void PixelShader(const Pixel& p, screen* screen,Camera& camera, vec3 currentColo
     vec3 directlight = vec3(0,0,0);
     for (size_t i = 0; i < lights.size(); i++)
      {
-      directlight += directLight(i,currentNormal,p,camera);
+      directlight += directLight(i,currentNormal,p,camera, phong);
     }
     vec3 illumination = currentColor * (directlight +  indirectLightPowerPerArea);
+    // vec3 illumination =(directlight );
     AABuffer[x][y] = illumination;
   }
 }
@@ -502,6 +518,7 @@ void Update(Camera& camera)
     camera.position.z -= SENSITIVITY;
     TransformationMatrix(transformation_mat,camera);
   }
+
   else if(keystate[SDL_SCANCODE_RIGHT])
   {
     camera.yaw  -= ROTATION_SENSITIVITY;
@@ -509,7 +526,7 @@ void Update(Camera& camera)
   }
   else if(keystate[SDL_SCANCODE_LEFT])
   {
-    camera.yaw  += ROTATION_SENSITIVITY;
+    camera.pitch  += ROTATION_SENSITIVITY;
     TransformationMatrix(transformation_mat, camera);
   }
 
@@ -540,6 +557,8 @@ void Update(Camera& camera)
   }
 
 }
+
+
 
 //yaw - y
 mat4 yaw_rotation(Camera& camera)
@@ -589,6 +608,7 @@ void TransformationMatrix(glm::mat4 &M, Camera& camera)
 }
 
 
+
 void initialize_camera(Camera &camera)
 {
   camera.position = vec4( 0, 0, -2.1,1 );
@@ -602,11 +622,12 @@ void initialize_camera(Camera &camera)
 void initLights()
 {
   vec4 lightPos( 0, -0.5, -0.7, 1.0 );
-  vec3 lightPower = LIGHT_COLOR_INTENSITY*vec3( 1, 1, 1 );
-  Light light;
-  light.pos = lightPos;
-  light.color = lightPower;
-  lights.push_back(light);
+  Light light(lightPos,
+  vec3(DIFFUSE_COLOR,DIFFUSE_COLOR,DIFFUSE_COLOR),
+  vec3(SPECULAR_COLOR,SPECULAR_COLOR,SPECULAR_COLOR),
+  vec3(LIGHT_COLOR_INTENSITY,LIGHT_COLOR_INTENSITY,LIGHT_COLOR_INTENSITY),
+  vec3(AMBIENT_INTENSITY,AMBIENT_INTENSITY,AMBIENT_INTENSITY), Pointlight );
+lights.push_back(light);
 }
 
 void initialize_vertices( vector<Vertex>& vertices, Triangle triangle)

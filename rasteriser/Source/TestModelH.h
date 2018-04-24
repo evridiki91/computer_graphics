@@ -5,6 +5,15 @@
 
 #include <glm/glm.hpp>
 #include <vector>
+#include <string>       // std::string
+#include <iostream>     // std::cout
+#include <sstream>      // std::istringstream
+#include <fstream>
+#define DIF 0.7f
+#define SPC 0.f
+#define SPC1 5.f
+#define AMB 0.05f
+
 //
 // float gaussian_5[5][5] = [[0.003765	0.015019	0.023792	0.015019	0.003765],
 // [0.015019	0.059912	0.094907	0.059912	0.015019],
@@ -30,6 +39,7 @@
 
 enum lightType_t { Pointlight, Spotlight, Directional};
 enum matType_t { Diffuse, Reflective, Refractive};
+
 class Phong
 {
 public:
@@ -61,6 +71,43 @@ public:
 		std::cout << "New Light Created" << '\n';
 	}
 };
+
+
+class Triangle
+{
+public:
+	glm::vec4 v0;
+	glm::vec4 v1;
+	glm::vec4 v2;
+	glm::vec4 normal;
+	glm::vec3 color;
+	Phong phong;
+	matType_t material;
+
+	Triangle( glm::vec4 v0, glm::vec4 v1, glm::vec4 v2, glm::vec3 color,
+	float diffuse, float specular, float ambient, matType_t material )
+		: v0(v0), v1(v1), v2(v2), color(color),phong(diffuse, specular, ambient),
+		material(material)
+	{
+		ComputeNormal();
+	}
+
+	void ComputeNormal()
+	{
+	  glm::vec3 e1 = glm::vec3(v1.x-v0.x,v1.y-v0.y,v1.z-v0.z);
+	  glm::vec3 e2 = glm::vec3(v2.x-v0.x,v2.y-v0.y,v2.z-v0.z);
+	  glm::vec3 normal3 = glm::normalize( glm::cross( e2, e1 ) );
+	  normal.x = normal3.x;
+	  normal.y = normal3.y;
+	  normal.z = normal3.z;
+	  normal.w = 1.0;
+	}
+};
+
+// Loads the Cornell Box. It is scaled to fill the volume:
+// -1 <= x <= +1
+// -1 <= y <= +1
+// -1 <= z <= +1
 
 
 bool loadObj(std::string path, std::vector<Triangle>& triangles, glm::vec3 color ){
@@ -117,44 +164,11 @@ bool loadObj(std::string path, std::vector<Triangle>& triangles, glm::vec3 color
 	}
 
 	for (unsigned int i = 0 ; i < faces.size(); i++){
-		triangles.push_back(Triangle(vertices[faces[i].x], vertices[faces[i].y], vertices[faces[i].z], color, DIF,SPC,AMB,Diffuse, 0 ) );
+		triangles.push_back(Triangle(vertices[faces[i].x], vertices[faces[i].y], vertices[faces[i].z], color, DIF,SPC,AMB,Diffuse ) );
 	}
 	return true;
 }
 
-
-
-class Triangle
-{
-public:
-	glm::vec4 v0;
-	glm::vec4 v1;
-	glm::vec4 v2;
-	glm::vec4 normal;
-	glm::vec3 color;
-
-	Triangle( glm::vec4 v0, glm::vec4 v1, glm::vec4 v2, glm::vec3 color )
-		: v0(v0), v1(v1), v2(v2), color(color)
-	{
-		ComputeNormal();
-	}
-
-	void ComputeNormal()
-	{
-	  glm::vec3 e1 = glm::vec3(v1.x-v0.x,v1.y-v0.y,v1.z-v0.z);
-	  glm::vec3 e2 = glm::vec3(v2.x-v0.x,v2.y-v0.y,v2.z-v0.z);
-	  glm::vec3 normal3 = glm::normalize( glm::cross( e2, e1 ) );
-	  normal.x = normal3.x;
-	  normal.y = normal3.y;
-	  normal.z = normal3.z;
-	  normal.w = 1.0;
-	}
-};
-
-// Loads the Cornell Box. It is scaled to fill the volume:
-// -1 <= x <= +1
-// -1 <= y <= +1
-// -1 <= z <= +1
 void LoadTestModel( std::vector<Triangle>& triangles )
 {
 	using glm::vec3;
@@ -188,24 +202,24 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	vec4 H(0,L,L,1);
 
 	// Floor:
-	triangles.push_back( Triangle( C, B, A, green ) );
-	triangles.push_back( Triangle( C, D, B, green ) );
+	triangles.push_back( Triangle( C, B, A, white,DIF,10,AMB, Diffuse ) );
+	triangles.push_back( Triangle( C, D, B, white,DIF,10,AMB, Diffuse ) );
 
 	// Left wall
-	triangles.push_back( Triangle( A, E, C, purple ) );
-	triangles.push_back( Triangle( C, E, G, purple ) );
+	triangles.push_back( Triangle( A, E, C, red,DIF ,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle( C, E, G, red,DIF ,SPC,AMB, Diffuse) );
 
 	// Right wall
-	triangles.push_back( Triangle( F, B, D, yellow ) );
-	triangles.push_back( Triangle( H, F, D, yellow ) );
+	triangles.push_back( Triangle( F, B, D, green,DIF ,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle( H, F, D, green,DIF ,SPC,AMB, Diffuse) );
 
 	// Ceiling
-	triangles.push_back( Triangle( E, F, G, cyan ) );
-	triangles.push_back( Triangle( F, H, G, cyan ) );
+	triangles.push_back( Triangle( E, F, G, white,DIF,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle( F, H, G, white,DIF ,SPC,AMB, Diffuse) );
 
 	// Back wall
-	triangles.push_back( Triangle( G, D, C, white ) );
-	triangles.push_back( Triangle( G, H, D, white ) );
+	triangles.push_back( Triangle( G, D, C, white,DIF,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle( G, H, D, white,DIF,SPC,AMB, Diffuse) );
 
 	// ---------------------------------------------------------------------------
 	// Short block
@@ -221,24 +235,24 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	H = vec4( 82,165,225,1);
 
 	// Front
-	triangles.push_back( Triangle(E,B,A,red) );
-	triangles.push_back( Triangle(E,F,B,red) );
+	triangles.push_back( Triangle(E,B,A,yellow, DIF,SPC1,AMB, Diffuse) );
+	triangles.push_back( Triangle(E,F,B,yellow,DIF,SPC1 ,AMB, Diffuse) );
 
 	// Front
-	triangles.push_back( Triangle(F,D,B,red) );
-	triangles.push_back( Triangle(F,H,D,red) );
+	triangles.push_back( Triangle(F,D,B,yellow, DIF,SPC1,AMB, Diffuse) );
+	triangles.push_back( Triangle(F,H,D,yellow,DIF,SPC1,AMB, Diffuse) );
 
 	// BACK
-	triangles.push_back( Triangle(H,C,D,red) );
-	triangles.push_back( Triangle(H,G,C,red) );
+	triangles.push_back( Triangle(H,C,D,yellow,DIF,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle(H,G,C,yellow,DIF,SPC,AMB, Diffuse) );
 
 	// LEFT
-	triangles.push_back( Triangle(G,E,C,red) );
-	triangles.push_back( Triangle(E,A,C,red) );
+	triangles.push_back( Triangle(G,E,C,yellow,DIF,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle(E,A,C,yellow,DIF,SPC,AMB, Diffuse) );
 
 	// TOP
-	triangles.push_back( Triangle(G,F,E,red) );
-	triangles.push_back( Triangle(G,H,F,red) );
+	triangles.push_back( Triangle(G,F,E,yellow,DIF,SPC1,AMB, Diffuse) );
+	triangles.push_back( Triangle(G,H,F,yellow,DIF,SPC1,AMB, Diffuse) );
 
 	// ---------------------------------------------------------------------------
 	// Tall block
@@ -254,24 +268,24 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	H = vec4(314,330,456,1);
 
 	// Front
-	triangles.push_back( Triangle(E,B,A,blue) );
-	triangles.push_back( Triangle(E,F,B,blue) );
+	triangles.push_back( Triangle(E,B,A,blue,DIF,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle(E,F,B,blue,DIF,SPC,AMB, Diffuse) );
 
 	// Front
-	triangles.push_back( Triangle(F,D,B,blue) );
-	triangles.push_back( Triangle(F,H,D,blue) );
+	triangles.push_back( Triangle(F,D,B,blue,DIF,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle(F,H,D,blue,DIF,SPC,AMB, Diffuse) );
 
 	// BACK
-	triangles.push_back( Triangle(H,C,D,blue) );
-	triangles.push_back( Triangle(H,G,C,blue) );
+	triangles.push_back( Triangle(H,C,D,blue,DIF,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle(H,G,C,blue,DIF,SPC,AMB, Diffuse) );
 
 	// LEFT
-	triangles.push_back( Triangle(G,E,C,blue) );
-	triangles.push_back( Triangle(E,A,C,blue) );
+	triangles.push_back( Triangle(G,E,C,blue,DIF,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle(E,A,C,blue,DIF,SPC,AMB, Diffuse) );
 
 	// TOP
-	triangles.push_back( Triangle(G,F,E,blue) );
-	triangles.push_back( Triangle(G,H,F,blue) );
+	triangles.push_back( Triangle(G,F,E,blue,DIF,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle(G,H,F,blue,DIF,SPC,AMB, Diffuse) );
 
 
 	// ----------------------------------------------
