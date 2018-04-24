@@ -15,6 +15,8 @@
 #define SPC1 0.8f
 #define AMB 0.1f
 
+using glm::vec3;
+
 enum lightType_t { Pointlight, Spotlight, Directional};
 enum matType_t { Diffuse, Reflective, Refractive};
 class Phong
@@ -56,6 +58,30 @@ public:
 };
 
 
+// Describe a sphere
+class Sphere
+ {
+public:
+	glm::vec3 center;
+	float radius;
+	glm::vec3 color;
+	Phong phong;
+	matType_t material;
+	float ior;
+
+	glm::vec4 get_normal(glm::vec4 pos_hit){
+		return glm::normalize(pos_hit - glm::vec4(center,1));
+	}
+
+	Sphere( glm::vec3 center, float radius, glm::vec3 color,
+		float diffuse, float specular, float ambient, matType_t material, float ior )
+		: center(center), radius(radius), color(color), phong(diffuse, specular, ambient),
+		material(material) , ior(ior)
+	{	}
+
+
+};
+
 // Used to describe a triangular surface:
 class Triangle
 {
@@ -68,6 +94,10 @@ public:
 	Phong phong;
 	matType_t material;
 	float ior;
+
+	glm::vec4 get_normal(){
+		return normal;
+	}
 
 	Triangle( glm::vec4 v0, glm::vec4 v1, glm::vec4 v2, glm::vec3 color,
 		float diffuse, float specular, float ambient, matType_t material, float ior )
@@ -155,7 +185,7 @@ bool loadObj(std::string path, std::vector<Triangle>& triangles, glm::vec3 color
 // -1 <= z <= +1
 
 
-void LoadTestModel( std::vector<Triangle>& triangles )
+void LoadTestModel( std::vector<Triangle>& triangles, std::vector<Sphere>& spheres)
 {
 	using glm::vec3;
 	using glm::vec4;
@@ -188,8 +218,8 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	vec4 H(0,L,L,1);
 
 	// Floor:
-	triangles.push_back( Triangle( C, B, A, white,DIF,SPC1,AMB, Diffuse, 0 ) );
-	triangles.push_back( Triangle( C, D, B, white,DIF,SPC1,AMB, Diffuse, 0 ) );
+	triangles.push_back( Triangle( C, B, A, white,DIF,SPC,AMB, Diffuse, 1.5 ) );
+	triangles.push_back( Triangle( C, D, B, white,DIF,SPC,AMB, Diffuse, 1.5 ) );
 
 	// Left wall
 	triangles.push_back( Triangle( A, E, C, red,DIF ,SPC,AMB, Diffuse, 0) );
@@ -200,8 +230,8 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	triangles.push_back( Triangle( H, F, D, green,DIF ,SPC,AMB, Diffuse, 0) );
 
 	// Ceiling
-	triangles.push_back( Triangle( E, F, G, white,DIF,SPC1,AMB, Diffuse, 0) );
-	triangles.push_back( Triangle( F, H, G, white,DIF ,SPC1,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle( E, F, G, white,DIF,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle( F, H, G, white,DIF ,SPC,AMB, Diffuse, 0) );
 
 	// Back wall
 	triangles.push_back( Triangle( G, D, C, white,DIF,SPC ,AMB, Diffuse, 0) );
@@ -233,8 +263,8 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	triangles.push_back( Triangle(H,G,C,yellow,DIF,SPC,AMB, Diffuse, 0) );
 
 	// LEFT
-	triangles.push_back( Triangle(G,E,C,yellow,DIF,SPC,AMB, Refractive, 1.6) );
-	triangles.push_back( Triangle(E,A,C,yellow,DIF,SPC,AMB, Refractive, 1.6) );
+	triangles.push_back( Triangle(G,E,C,yellow,DIF,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle(E,A,C,yellow,DIF,SPC,AMB, Diffuse, 0) );
 
 	// TOP
 	triangles.push_back( Triangle(G,F,E,yellow,DIF,SPC,AMB, Diffuse, 0) );
@@ -276,6 +306,7 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 
 	// ----------------------------------------------
 	// Scale to the volume [-1,1]^3
+	spheres.push_back(Sphere(vec3(450,150,150), 75, white, DIF, SPC1 ,AMB, Refractive, 1.5));
 
 	for( size_t i=0; i<triangles.size(); ++i )
 	{
@@ -301,6 +332,42 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 
 		triangles[i].ComputeNormal();
 	}
+
+	for( size_t i=0; i<spheres.size(); ++i ){
+
+		spheres[i].center.x   *= 2/L;
+		spheres[i].center.y   *= 2/L;
+		spheres[i].center.z   *= 2/L;
+
+		spheres[i].radius   *= 2/L;
+
+		spheres[i].center -= vec3(1,1,1);
+		spheres[i].center.x *= -1;
+		spheres[i].center.y *= -1;
+
+	}
+
+	// triangles.clear();
+	// spheres.clear();
+
+}
+
+bool solveQuadratic(const float &a, const float &b, const float &c, float &x0, float &x1)
+{
+    float discr = b * b - 4 * a * c;
+    if (discr < 0) return false;
+    else if (discr == 0) {
+        x0 = x1 = - 0.5 * b / a;
+    }
+    else {
+        float q = (b > 0) ?
+            -0.5 * (b + sqrt(discr)) :
+            -0.5 * (b - sqrt(discr));
+        x0 = q / a;
+        x1 = c / q;
+    }
+
+    return true;
 }
 
 #endif
