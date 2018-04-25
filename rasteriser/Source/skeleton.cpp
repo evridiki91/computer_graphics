@@ -31,6 +31,16 @@ using glm::mat4;
 #define AMBIENT_INTENSITY 0.1f
 #define SHINY_FACTOR 15.f
 #define INDIRECT_LIGHT_INTENSITY 0.3f
+#define NEAR 0.1f
+#define FAR 3.f
+//https://en.wikipedia.org/wiki/Angle_of_view#Measuring_a_camera's_field_of_view
+float fov = 2*atanf(SCREEN_HEIGHT/2*FOCAL_LENGTH);
+float ratio = SCREEN_HEIGHT/SCREEN_WIDTH;
+float Hnear = 2 * tan(fov / 2) * NEAR;
+float Wnear = Hnear * ratio;
+float Hfar = 2 * tan(fov / 2) * FAR;
+float Wfar = Hfar * ratio;
+
 
 struct Pixel
 {
@@ -47,6 +57,7 @@ struct Camera {
   float yaw; //angle for rotating around y-axis
   float pitch;
   float roll;
+  std::vector<Plane> cliipingPlanes;
 };
 
 
@@ -67,6 +78,7 @@ vector<Light> lights;
 int current_light_index;
 float dof = 3;
 int dof_enabled = false;
+
 /* -------------------------------------------------
  FUNCTIONS
  ---------------------------------------------------*/
@@ -83,14 +95,46 @@ void DrawLineSDL( screen* screen, Pixel a, Pixel b, vec3 color );
 void DrawPolygonEdges( vector<Vertex>& vertices,screen* screen, Camera &camera );
 void PixelShader(const Pixel& p, screen* screen,Camera& camera, vec3 currentColor, vec4 currentNormal, Phong phong);
 void initialize_vertices( vector<Vertex>& vertices, Triangle triangle);
-void DrawPolygon(const vector<Vertex>& vertices, vec3 currentColor, vec4 normal,screen* screen, Camera& camera, Phong phong );
+void DrawPolygon(const vector<Vertex>& v;ertices, vec3 currentColor, vec4 normal,screen* screen, Camera& camera, Phong phong );
 void ComputePolygonRows(const vector<Pixel>& vertexPixels,vector<Pixel>& leftPixels,vector<Pixel>& rightPixels );
 void DrawPolygonRows( const vector<Pixel>& leftPixels,const vector<Pixel>& rightPixels
                 ,vec3 currentColor, vec4 normal, screen* screen, Camera& camera, Phong phong);
 
 /******************************************************************************************/
 
-vec3 directLight( int n, vec4 normal, Pixel pixel, Camera &camera, Phong phong){
+void make_frustum(Camera &camera)
+{
+
+
+  vec3 right(transformation_mat[0][0], transformation_mat[0][1], transformation_mat[0][2] );
+  vec3 down(transformation_mat[1][0], transformation_mat[1][1], transformation_mat[1][2] );
+  vec3 forward(transformation_mat[2][0], transformation_mat[2][1], transformation_mat[2][2]);
+  vec3 up = -down;
+
+  vec3 far_center = camera.pos + forward*FAR;
+
+  vec3 far_top_left  = far_center + (up * Hfar/2) - (right * Wfar/2);
+  vec3 far_top_right = far_center + (up * Hfar/2) + (right * Wfar/2);
+  vec3 far_bot_left  = far_center - (up * Hfar/2) - (right * Wfar/2);
+  vec3 far_bot_right = far_center - (up * Hfar/2) + (right * Wfar/2);
+
+  vec3 near_center = camera.pos + forward*NEAR;
+
+  vec3 near_top_left  = near_center + (up * Hnear/2) - (right * Wnear/2);
+  vec3 near_top_right = near_center + (up * Hnear/2) + (right * Wnear/2);
+  vec3 near_bot_left  = near_center - (up * Hnear/2) - (right * Wnear/2);
+  vec3 near_bot_right = near_center - (up * Hnear/2) + (right * Wnear/2);
+
+
+  camera.cliipingPlanes.push_back()
+
+
+}
+
+
+
+vec3 directLight( int n, vec4 normal, Pixel pixel, Camera &camera, Phong phong)
+{
 
   vec4 lightPos = lights[n].pos;
   vec3 power = lights[n].intensity;
@@ -115,7 +159,8 @@ vec3 directLight( int n, vec4 normal, Pixel pixel, Camera &camera, Phong phong){
 }
 
 
-void ComputePolygonRows(const vector<Pixel>& vertexPixels,vector<Pixel>& leftPixels,vector<Pixel>& rightPixels ){
+void ComputePolygonRows(const vector<Pixel>& vertexPixels,vector<Pixel>& leftPixels,vector<Pixel>& rightPixels )
+{
   int min_y = numeric_limits<int>::max();
   int max_y = numeric_limits<int>::min();
 
@@ -165,7 +210,8 @@ void ComputePolygonRows(const vector<Pixel>& vertexPixels,vector<Pixel>& leftPix
   }
 }
 
-void Bresenham(Pixel a, Pixel b, vector<Pixel>& result){
+void Bresenham(Pixel a, Pixel b, vector<Pixel>& result)
+{
 
   float x0 = a.x; float x1 = b.x;
   float y0 = a.y; float y1 = b.y;
@@ -205,7 +251,8 @@ void Bresenham(Pixel a, Pixel b, vector<Pixel>& result){
 
 
 void DrawPolygonRows( const vector<Pixel>& leftPixels,const vector<Pixel>& rightPixels
-                ,vec3 currentColor, vec4 normal, screen* screen, Camera& camera, Phong phong ){
+                ,vec3 currentColor, vec4 normal, screen* screen, Camera& camera, Phong phong )
+                {
   for (int row = 0; row < rightPixels.size(); row++)
   {
     vector<Pixel> pixels;
@@ -231,7 +278,8 @@ void DrawPolygon( const vector<Vertex>& vertices, vec3 currentColor, vec4 normal
   DrawPolygonRows( leftPixels, rightPixels,currentColor, normal, screen,camera, phong);
 }
 
-vec3 calc_blur(int i, int j, int size){
+vec3 calc_blur(int i, int j, int size)
+{
   vec3 sum(0,0,0);
   int num = 0;
   for (int x = -(size-1)/2; x < (size-1)/2;x++)
@@ -248,7 +296,8 @@ vec3 calc_blur(int i, int j, int size){
   return sum/=num;
 }
 
-void post_processing(Camera camera){
+void post_processing(Camera camera)
+{
   vec3 processed[SCREEN_WIDTH][SCREEN_HEIGHT];
 
   #pragma omp for
@@ -293,7 +342,8 @@ void post_processing(Camera camera){
 }
 
 
-void putPixels(screen* screen){
+void putPixels(screen* screen)
+{
   #pragma omp for
   for (int i =0; i< SCREEN_WIDTH;i++)
   {
@@ -306,7 +356,8 @@ void putPixels(screen* screen){
   }
 }
 
-void putPixelsAA(screen* screen){
+void putPixelsAA(screen* screen)
+{
   #pragma omp for
   for (int i =0; i< SCREEN_WIDTH*ANTIALIASING;i++)
   {
@@ -320,7 +371,8 @@ void putPixelsAA(screen* screen){
 }
 
 
-void antialiasing(){
+void antialiasing()
+{
 
   for( int x=0; x<SCREEN_WIDTH*ANTIALIASING; x+=ANTIALIASING ){
     int truex =(x/ANTIALIASING);
@@ -407,12 +459,12 @@ void Draw(screen* screen, Camera& camera )
     }
   }
 
-
   /* Clear buffer */
 
   for( uint32_t i=0; i<triangles.size(); ++i ){
     vector<Vertex> vertices(3);
     initialize_vertices(vertices,triangles[i]);
+
     vec3 currentColor = triangles[i].color;
     vec4 currentNormal = triangles[i].normal;
     Phong phong = triangles[i].phong;
@@ -451,7 +503,8 @@ void PixelShader(const Pixel& p, screen* screen,Camera& camera, vec3 currentColo
 }
 
 
-void Interpolate( Pixel a, Pixel b, vector<Pixel>& result ){
+void Interpolate( Pixel a, Pixel b, vector<Pixel>& result )
+{
   int N = result.size();
   float stepx =  ((b.x-a.x) / float(std::max(N-1,1)) );
   float stepy =  ((b.y-a.y) / float(std::max(N-1,1)) );
@@ -473,7 +526,8 @@ void Interpolate( Pixel a, Pixel b, vector<Pixel>& result ){
 }
 
 //a - start b - end
-void DrawLineSDL( screen* screen, Pixel a, Pixel b, vec3 color ){
+void DrawLineSDL( screen* screen, Pixel a, Pixel b, vec3 color )
+{
   int deltax = (glm::abs( a.x - b.x ));
   int deltay = (glm::abs( a.y - b.y ));
 

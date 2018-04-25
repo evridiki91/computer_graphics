@@ -1,4 +1,3 @@
-#ifndef TEST_MODEL_CORNEL_BOX_H
 #define TEST_MODEL_CORNEL_BOX_H
 
 // Defines a simple test model: The Cornel Box
@@ -49,6 +48,17 @@ public:
 
 	Phong(float kd, float ks, float ka)
 	: kd(kd), ks(ks), ka(ka) {}
+
+};
+
+class Plane
+{
+public:
+	glm::vec3 normal;
+	float distance;
+
+	Plane(float normal, float distance)
+	: normal(normal), distance(distance) {}
 
 };
 
@@ -112,6 +122,14 @@ public:
 
 bool loadObj(std::string path, std::vector<Triangle>& triangles, glm::vec3 color ){
 	glm::vec3 white(  0.75f, 0.75f, 0.75f );
+	glm::vec3 black(0,0,0);
+	glm::vec3 red(    0.75f, 0.15f, 0.15f );
+	glm::vec3 yellow( 0.75f, 0.75f, 0.15f );
+	glm::vec3 green(  0.15f, 0.75f, 0.15f );
+	glm::vec3 cyan(   0.15f, 0.75f, 0.75f );
+	glm::vec3 blue(   0.15f, 0.15f, 0.75f );
+	glm::vec3 purple( 0.75f, 0.15f, 0.75f );
+	glm::vec3 offwhite(0.75f,0.75f,0.71f);
 	std::vector<glm::vec4> vertices;
 	std::vector<glm::vec4> faces;
 
@@ -140,9 +158,15 @@ bool loadObj(std::string path, std::vector<Triangle>& triangles, glm::vec3 color
 		// else if (line.substr(0,2) == "vt"){
     //
 		// }
-		// else if (line.substr(0,2) == "vn"){
-    //
-		// }
+		else if (line.substr(0,2) == "vn"){
+    	std::istringstream linestream(line.substr(2));
+			glm::vec4 normal;
+			linestream >> normal.x;
+			linestream >> normal.y;
+			linestream >> normal.z;
+			normal.w = 1;
+			vertices.push_back(normal);
+		}
 
 		else if (line[0] == 'f'){
 			glm::vec4 face;
@@ -164,7 +188,7 @@ bool loadObj(std::string path, std::vector<Triangle>& triangles, glm::vec3 color
 	}
 
 	for (unsigned int i = 0 ; i < faces.size(); i++){
-		triangles.push_back(Triangle(vertices[faces[i].x], vertices[faces[i].y], vertices[faces[i].z], color, DIF,SPC,AMB,Diffuse ) );
+		triangles.push_back(Triangle(vertices[faces[i].x], vertices[faces[i].y], vertices[faces[i].z], offwhite, DIF,SPC,AMB,Diffuse ) );
 	}
 	return true;
 }
