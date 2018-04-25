@@ -37,26 +37,32 @@ vec3 white(  0.75f, 0.75f, 0.75f );
 vector<Light> lights;
 size_t light_selection;
 
-#define SCREEN_WIDTH 250*3
-#define SCREEN_HEIGHT 250*3
+#define SCREEN_WIDTH 250*2
+#define SCREEN_HEIGHT 250*2
 #define FULLSCREEN_MODE false
-#define FOCAL_LENGTH SCREEN_HEIGHT/2
+#define FOCAL_LENGTH SCREEN_WIDTH/2
+#define FOCAL_LENGTH_2 1.5
 #define SENSITIVITY 0.1f
 #define ROTATION_SENSITIVITY 1f
 #define LIGHT_SENSITIVITY 0.2f
 #define PI_F 3.14159265358979f
-#define MAX_RECURSIVE_DEPTH 20
-
+#define APERTURE 0.2
+int MAX_RECURSIVE_DEPTH = 10;
+int MODE = 1; //1-AA,2-DOF
 
 #define ANTIALIASING_X 1.f
+#define LIGHT_SAMPLES 50
+#define LIGHT_LENGTH 0.08f
+#define CAMERA_SAMPLES 5
 
 //LIGHT PARAMETERS
-#define DIFFUSE_COLOR  1.f
-#define SPECULAR_COLOR 1.8f
+#define DIFFUSE_COLOR  4.f
+#define SPECULAR_COLOR 0.4f
 #define AMBIENT_INTENSITY 0.1f
-#define LIGHT_INTENSITY 25.f
+
+#define LIGHT_INTENSITY 15.f
 #define SHINY_FACTOR 10.f
-#define INDIRECT_LIGHT_INTENSITY 0.5f
+#define INDIRECT_LIGHT_INTENSITY 0.2f
 
 vec3 black(0.0,0.0,0.0);
 
@@ -76,6 +82,7 @@ void initialize_camera(Camera &camera);
 vec3 calculateColor(vec3 color,const Intersection& i, vec4 camera );
 vec3 pointLight(const Intersection& i, int n, vec4 n_hat, vec4 camera);
 void initLights();
+void initAreaLights();
 
 /* ----------------------------------------------------------------------------*/
 /* FUNCTIONS                                                                   */
@@ -87,10 +94,11 @@ void initLights();
 
 int main( int argc, char* argv[] )
 {
+
   screen *screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN_MODE );
   Camera camera;
   initialize_camera(camera);
-  initLights();
+  initAreaLights();
   light_selection = 0;
 
   Intersection closestIntersection;
@@ -123,12 +131,6 @@ int main( int argc, char* argv[] )
 
   while( NoQuitMessageSDL() )
   {
-    // std::cout << "camera pos" << camera.position.x << camera.position.y << camera.position.z << '\n';
-    // std::cout << "sphere pos" << spheres[0].center.x << spheres[0].center.y << spheres[0].center.z << '\n';
-    // float distance = glm::distance(vec3(camera.position), spheres[0].center);
-    // std::cout << "distance" << distance << '\n';
-    // std::cout << "triangle 1 pos" << triangles[0].v0.x << triangles[0].v0.y << triangles[0].v0.z << '\n';
-
 
       Update(camera);
       Draw(screen,camera,closestIntersection);
@@ -146,16 +148,34 @@ int main( int argc, char* argv[] )
 /* INITIALISERS                                                                   */
 /* ----------------------------------------------------------------------------*/
 
+void initAreaLights()
+{
+  vec4 lightPos( 0, -0.5, -0.7, 1.0 );
+  float step = LIGHT_LENGTH/ (LIGHT_SAMPLES-1);
+  int samples = LIGHT_SAMPLES*LIGHT_SAMPLES;
+  for (float i = -LIGHT_LENGTH/2; i <= LIGHT_LENGTH/2; i+=step )
+  {
+    for (float j = -LIGHT_LENGTH/2; j <= LIGHT_LENGTH/2; j+=step )
+    {
+      Light light(lightPos+vec4(1,0,0,1)*i + vec4(0,0,1,1)*j,
+        vec3(DIFFUSE_COLOR/samples,DIFFUSE_COLOR/samples,DIFFUSE_COLOR/samples),
+        vec3(SPECULAR_COLOR/samples,SPECULAR_COLOR/samples,SPECULAR_COLOR/samples),
+        vec3(LIGHT_INTENSITY/samples,LIGHT_INTENSITY/samples,LIGHT_INTENSITY/samples),
+        vec3(AMBIENT_INTENSITY/samples,AMBIENT_INTENSITY/samples,AMBIENT_INTENSITY/samples), Pointlight );
+      lights.push_back(light);
+    }
+  }
+}
+
 void initLights()
 {
-  vec4 lightPos( -1, 0, -2, 1.0 );
-
-  Light light(lightPos,
-    vec3(DIFFUSE_COLOR,DIFFUSE_COLOR,DIFFUSE_COLOR),
-    vec3(SPECULAR_COLOR,SPECULAR_COLOR,SPECULAR_COLOR),
-    vec3(LIGHT_INTENSITY,LIGHT_INTENSITY,LIGHT_INTENSITY),
-    vec3(AMBIENT_INTENSITY,AMBIENT_INTENSITY,AMBIENT_INTENSITY), Pointlight );
-  lights.push_back(light);
+  vec4 lightPos( 0, -0.5, -0.7, 1.0 );
+      Light light(lightPos,
+        vec3(DIFFUSE_COLOR,DIFFUSE_COLOR,DIFFUSE_COLOR),
+        vec3(SPECULAR_COLOR,SPECULAR_COLOR,SPECULAR_COLOR),
+        vec3(LIGHT_INTENSITY,LIGHT_INTENSITY,LIGHT_INTENSITY),
+        vec3(AMBIENT_INTENSITY,AMBIENT_INTENSITY,AMBIENT_INTENSITY), Pointlight );
+      lights.push_back(light);
 }
 
 void initialize_camera(Camera &camera)
@@ -191,20 +211,23 @@ vec3 pointLight(const Intersection& i, int n, vec4 n_hat, vec4 camera)
   float r = glm::distance(lightPos, i.position);//DISTANCE
   vec4 r_hat = glm::normalize(lightPos - i.position);//DIRECTION of light
 
+  int type = i.objectType;
+  int material = Diffuse;
+
+    if (type == 0)
+    {
+      material = triangles[i.ObjectIndex].material;
+    }
+    else if (type == 1 )
+    {
+      material = spheres[i.ObjectIndex].material;
+    }
+
+
   Intersection shadows_intersection;
   bool inter = ClosestIntersection(i.position + 0.00001f*r_hat ,r_hat,shadows_intersection);
-  int type = shadows_intersection.objectType;
-  int skip = 0;
-  if (type == 0)
-  {
-    if (triangles[i.ObjectIndex].material == Refractive ) skip = 1;
-  }
-  else if (type == 1)
-  {
-    if (spheres[i.ObjectIndex].material == Refractive ) skip = 1;
-  }
 
-  if (inter && (shadows_intersection.distance < r ) && !(skip))
+  if ( material!= Refractive && inter && (shadows_intersection.distance < r )  )
   {
     return vec3(0,0,0);
   }
@@ -222,6 +245,7 @@ vec3 pointLight(const Intersection& i, int n, vec4 n_hat, vec4 camera)
     vec3 specular = attenuation * pow(spec_intensity,SHINY_FACTOR)*triangles[i.ObjectIndex].phong.ks;
     vec3 ambient  =  lights[n].diffuse_color * triangles[i.ObjectIndex].phong.ka;
     vec3 D = diffuse*lights[n].diffuse_color + specular*lights[n].specular_color + ambient;
+    D = diffuse;
     D = clamp(D,vec3(0,0,0),vec3(1,1,1));
     return D;
   }
@@ -231,6 +255,8 @@ vec3 pointLight(const Intersection& i, int n, vec4 n_hat, vec4 camera)
     vec3 specular = attenuation * pow(spec_intensity,SHINY_FACTOR)*spheres[i.ObjectIndex].phong.ks;
     vec3 ambient  =  lights[n].diffuse_color * spheres[i.ObjectIndex].phong.ka;
     vec3 D = diffuse*lights[n].diffuse_color + specular*lights[n].specular_color + ambient;
+    D = diffuse;
+
     D = clamp(D,vec3(0,0,0),vec3(1,1,1));
     return D;
   }
@@ -320,6 +346,7 @@ vec3 shade(vec4 start, vec4 d, Intersection &closestIntersection, int depth, vec
   bool intersection = ClosestIntersection(start,d,closestIntersection);
 
   if(depth > MAX_RECURSIVE_DEPTH) return vec3(0,0,0);
+
   if (intersection==true)
   {
     if (closestIntersection.objectType == 1)
@@ -329,7 +356,7 @@ vec3 shade(vec4 start, vec4 d, Intersection &closestIntersection, int depth, vec
           case Diffuse :
           {
             color += calculateColor(spheres[closestIntersection.ObjectIndex].color,closestIntersection, start);
-            break;
+            return color;
           }
           case Reflective:
           {
@@ -337,7 +364,7 @@ vec3 shade(vec4 start, vec4 d, Intersection &closestIntersection, int depth, vec
                 vec4 reflected_d = reflection_direction(d,spheres[closestIntersection.ObjectIndex].get_normal(closestIntersection.position));
                 color += spheres[closestIntersection.ObjectIndex].phong.ks
                         * shade(closestIntersection.position+ 0.000001f*reflected_d,reflected_d , closestIntersection, depth+1, color);
-                break;
+                return color;
           }
 
           case Refractive:
@@ -363,7 +390,7 @@ vec3 shade(vec4 start, vec4 d, Intersection &closestIntersection, int depth, vec
             Refl_color = shade(reflectionRayOrig, reflectionDirection, closestIntersection,  depth + 1, Refl_color);
 
             color += Refl_color * kr + Refr_color * (1 - kr);
-            break;
+            return color;
           }
 
         }
@@ -376,7 +403,7 @@ vec3 shade(vec4 start, vec4 d, Intersection &closestIntersection, int depth, vec
         case Diffuse:
         {
           color += calculateColor(triangles[closestIntersection.ObjectIndex].color,closestIntersection, start);
-          break;
+          return color;
         }
 
         case Reflective:
@@ -385,7 +412,7 @@ vec3 shade(vec4 start, vec4 d, Intersection &closestIntersection, int depth, vec
               vec4 reflected_d = reflection_direction(d,triangles[closestIntersection.ObjectIndex].normal);
               color += triangles[closestIntersection.ObjectIndex].phong.ks
                       * shade(closestIntersection.position+ 0.000001f*reflected_d,reflected_d , closestIntersection, depth+1, color);
-              break;
+              return color;
         }
         case Refractive:
         {
@@ -412,6 +439,7 @@ vec3 shade(vec4 start, vec4 d, Intersection &closestIntersection, int depth, vec
 
           // mix the two
           color += Refl_color * kr + Refr_color * (1 - kr);
+          return color;
           break;
         }
 
@@ -422,45 +450,62 @@ vec3 shade(vec4 start, vec4 d, Intersection &closestIntersection, int depth, vec
         }
       }
     }
-    return color;
   }
   else return vec3(0,0,0);
 }
-
 
 
 /*Place your drawing here*/
 void Draw(screen* screen,Camera &camera,Intersection &closestIntersection){
   /* Clear buffer */
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
-
-  for(int x = 0; x < SCREEN_WIDTH*ANTIALIASING_X; x+=int(ANTIALIASING_X))
-  {
-    int truex =(x/ANTIALIASING_X);
-
-    for(int y = 0; y < SCREEN_HEIGHT*ANTIALIASING_X; y+=int(ANTIALIASING_X))
+  switch (MODE) {
+    case 1:
     {
-      int truey = (y/ANTIALIASING_X);
-      vec3 sum(0,0,0);
-
-      for (int sample_x = 0; sample_x < ANTIALIASING_X; sample_x++ )
+      for(int x = 0; x < SCREEN_WIDTH*ANTIALIASING_X; x+=int(ANTIALIASING_X))
       {
-        for (int sample_y = 0 ; sample_y < ANTIALIASING_X; sample_y++ )
-        {
+        int truex =(x/ANTIALIASING_X);
 
-          vec4 d(x + sample_x - (SCREEN_WIDTH*ANTIALIASING_X/2), y + sample_y - (SCREEN_HEIGHT*ANTIALIASING_X/2), FOCAL_LENGTH*ANTIALIASING_X,1);
-          d = camera.R * d;
-          vec3 initial_color(0,0,0);
-          vec3 color = shade(camera.position,d,closestIntersection,1,initial_color);
-          sum += color;
+        for(int y = 0; y < SCREEN_HEIGHT*ANTIALIASING_X; y+=int(ANTIALIASING_X))
+        {
+          int truey = (y/ANTIALIASING_X);
+          vec3 sum(0,0,0);
+
+          for (int sample_x = 0; sample_x < ANTIALIASING_X; sample_x++ )
+          {
+            for (int sample_y = 0 ; sample_y < ANTIALIASING_X; sample_y++ )
+            {
+
+              vec4 d(x + sample_x - (SCREEN_WIDTH*ANTIALIASING_X/2), y + sample_y - (SCREEN_HEIGHT*ANTIALIASING_X/2), FOCAL_LENGTH*ANTIALIASING_X,1);
+              d = camera.R * d;
+              vec3 initial_color(0,0,0);
+              d = glm::normalize(d);
+              vec3 color = shade(camera.position,d,closestIntersection,1,initial_color);
+              sum += color;
+            }
+          }
+          sum /= ANTIALIASING_X*ANTIALIASING_X;
+
+          PutPixelSDL(screen,truex,truey,sum);
         }
       }
-      sum /= ANTIALIASING_X*ANTIALIASING_X;
-      PutPixelSDL(screen,truex,truey,sum);
+    break;
+    }
+    case 2:
+    {
+      vec4 originalCameraPos = camera.position;
+      for(int x = 0; x < SCREEN_WIDTH; x++)
+      {
+        for(int y = 0; y < SCREEN_HEIGHT; y++)
+        {
+          for (size_t i = 0; i < CAMERA_SAMPLES; i++) {
+          }
+        }
+      }
+      break;
     }
   }
 }
-
 
 
 void rotation_aroundY(Camera& camera, int dir)
@@ -580,12 +625,18 @@ void Update(Camera &camera)
   {
     light_selection = (light_selection + 1 ) % lights.size();
   }
+  else if (keystate[SDL_SCANCODE_U])
+  {
+    MAX_RECURSIVE_DEPTH ++;
+    std::cout << "increased depth to " <<MAX_RECURSIVE_DEPTH << '\n';
+  }
 
 }
 glm::vec2 sphere_coords_texture(vec3 normal){
   glm::vec2 coord;
   coord.x = (1 + atan2(normal.z, normal.x) / PI_F) * 0.5;
   coord.y = acosf(normal.y) / PI_F;
+  return coord;
 }
 
 bool ClosestIntersection(vec4 start,vec4 dir, Intersection& closestIntersection )

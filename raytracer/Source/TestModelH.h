@@ -12,7 +12,7 @@
 
 #define DIF 0.8f
 #define SPC 0.f
-#define SPC1 0.8f
+#define SPC1 0.5f
 #define AMB 0.1f
 
 using glm::vec3;
@@ -70,7 +70,8 @@ public:
 	float ior;
 
 	glm::vec4 get_normal(glm::vec4 pos_hit){
-		return glm::normalize(pos_hit - glm::vec4(center,1));
+		glm::vec3 norm =(glm::vec3(pos_hit) - center)/radius;
+		return glm::vec4(norm,1);
 	}
 
 	Sphere( glm::vec3 center, float radius, glm::vec3 color,
@@ -121,6 +122,13 @@ public:
 
 bool loadObj(std::string path, std::vector<Triangle>& triangles, glm::vec3 color ){
 	glm::vec3 white(  0.75f, 0.75f, 0.75f );
+	glm::vec3 red(    0.75f, 0.15f, 0.15f );
+	glm::vec3 yellow( 0.75f, 0.75f, 0.15f );
+	glm::vec3 green(  0.15f, 0.75f, 0.15f );
+	glm::vec3 cyan(   0.15f, 0.75f, 0.75f );
+	glm::vec3 blue(   0.15f, 0.15f, 0.75f );
+	glm::vec3 purple( 0.75f, 0.15f, 0.75f );
+
 	std::vector<glm::vec4> vertices;
 	std::vector<glm::vec4> faces;
 
@@ -132,6 +140,8 @@ bool loadObj(std::string path, std::vector<Triangle>& triangles, glm::vec3 color
 
 	std::string line;
 	while(getline(file, line)) {
+
+
 		if (line[0] == '#' ){
 			//comment so do nothing
 		}
@@ -169,13 +179,13 @@ bool loadObj(std::string path, std::vector<Triangle>& triangles, glm::vec3 color
 			faces.push_back(face);
 		}
 
-		// std::cout << line << "\n";
 	}
 
 	for (unsigned int i = 0 ; i < faces.size(); i++){
 		triangles.push_back(Triangle(vertices[faces[i].x], vertices[faces[i].y], vertices[faces[i].z], color, DIF,SPC,AMB,Diffuse, 0 ) );
 	}
 	return true;
+
 }
 
 
@@ -222,8 +232,8 @@ void LoadTestModel( std::vector<Triangle>& triangles, std::vector<Sphere>& spher
 	triangles.push_back( Triangle( C, D, B, white,DIF,SPC,AMB, Diffuse, 1.5 ) );
 
 	// Left wall
-	triangles.push_back( Triangle( A, E, C, red,DIF ,SPC,AMB, Diffuse, 0) );
-	triangles.push_back( Triangle( C, E, G, red,DIF ,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle( A, E, C, red,DIF ,SPC1,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle( C, E, G, red,DIF ,SPC1,AMB, Diffuse, 0) );
 
 	// Right wall
 	triangles.push_back( Triangle( F, B, D, green,DIF ,SPC,AMB, Diffuse, 0) );
@@ -236,6 +246,7 @@ void LoadTestModel( std::vector<Triangle>& triangles, std::vector<Sphere>& spher
 	// Back wall
 	triangles.push_back( Triangle( G, D, C, white,DIF,SPC ,AMB, Diffuse, 0) );
 	triangles.push_back( Triangle( G, H, D, white,DIF,SPC ,AMB, Diffuse, 0) );
+
 
 	// ---------------------------------------------------------------------------
 	// Short block
@@ -284,8 +295,8 @@ void LoadTestModel( std::vector<Triangle>& triangles, std::vector<Sphere>& spher
 	H = vec4(314,330,456,1);
 
 	// Front
-	triangles.push_back( Triangle(E,B,A,blue,DIF,SPC,AMB, Diffuse, 0) );
-	triangles.push_back( Triangle(E,F,B,blue,DIF,SPC,AMB, Diffuse, 0) );
+	triangles.push_back( Triangle(E,B,A,blue,DIF,SPC,AMB, Diffuse, 2) );
+	triangles.push_back( Triangle(E,F,B,blue,DIF,SPC,AMB, Diffuse, 2) );
 
 	// Front
 	triangles.push_back( Triangle(F,D,B,blue,DIF,SPC,AMB, Diffuse, 0) );
@@ -304,9 +315,12 @@ void LoadTestModel( std::vector<Triangle>& triangles, std::vector<Sphere>& spher
 	triangles.push_back( Triangle(G,H,F,blue,DIF,SPC,AMB, Diffuse, 0) );
 
 
+
+
 	// ----------------------------------------------
-	// Scale to the volume [-1,1]^3
-	spheres.push_back(Sphere(vec3(450,150,150), 75, white, DIF, SPC1 ,AMB, Refractive, 1.5));
+	// Scale to the volume [-1,1]^3r
+	// spheres.push_back(Sphere(vec3(400,150,150), 75, white, DIF, SPC1 ,AMB, Refractive, 0.8));
+	// spheres.push_back(Sphere(vec3(200,350,200), 100, white, DIF, SPC1 ,AMB, Reflective, 0.8));
 
 	for( size_t i=0; i<triangles.size(); ++i )
 	{
