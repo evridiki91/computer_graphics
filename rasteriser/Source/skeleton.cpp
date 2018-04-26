@@ -4,10 +4,14 @@
 #include "SDLauxiliary.h"
 #include "TestModelH.h"
 #include <stdint.h>
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
 
 
 using namespace std;
 using namespace glm;
+using namespace cv;
+
 using glm::vec3;
 using glm::mat3;
 using glm::vec4;
@@ -24,7 +28,7 @@ using glm::mat4;
 #define ROTATION_SENSITIVITY 0.05f
 #define LIGHT_SENSITIVITY 0.2f
 #define PI_F 3.14159265358979f
-#define LIGHT_COLOR_INTENSITY 10.f
+#define LIGHT_COLOR_INTENSITY 5.f
 
 #define DIFFUSE_COLOR  1.f
 #define SPECULAR_COLOR 0.2f
@@ -34,6 +38,7 @@ using glm::mat4;
 #define NEAR 0.2f
 #define FAR 4.f
 #define ANG2RAD 3.14159/180.0
+#define CLIPPING_ENABLED 1
 float ratio = SCREEN_HEIGHT/SCREEN_WIDTH;
 
 //https://en.wikipedia.org/wiki/Angle_of_view#Measuring_a_camera's_field_of_view
@@ -45,6 +50,7 @@ float Wnear = Hnear*ratio;
 float Hfar = FAR*tan(fov/2);
 float Wfar = Hfar * ratio;
 
+
 struct Pixel
 {
   int x;
@@ -52,6 +58,8 @@ struct Pixel
   float zinv;
   vec4 pos3d;
   float z;
+  vec2 uv;
+  int textured;
 };
 
 struct Camera {
@@ -66,7 +74,9 @@ struct Camera {
 
 struct Vertex
 {
+  vec2 uv;
   vec4 position;
+  int textured;
 };
 
 vec3 white(1,1,1);
@@ -82,7 +92,7 @@ int current_light_index;
 
 float dof = 3;
 int dof_enabled = false;
-
+vec3 texture_array[256][256];
 /* -------------------------------------------------
  FUNCTIONS
  ---------------------------------------------------*/
@@ -103,7 +113,7 @@ void DrawPolygon(const vector<Vertex>& vertices, vec3 currentColor, vec4 normal,
 void ComputePolygonRows(const vector<Pixel>& vertexPixels,vector<Pixel>& leftPixels,vector<Pixel>& rightPixels );
 void DrawPolygonRows( const vector<Pixel>& leftPixels,const vector<Pixel>& rightPixels
                 ,vec3 currentColor, vec4 normal, screen* screen, Camera& camera, Phong phong);
-
+void Bresenham(Pixel a, Pixel b, vector<Pixel>& result);
 /******************************************************************************************/
 
 void make_frustum(Camera &camera)
@@ -245,6 +255,7 @@ void Bresenham(Pixel a, Pixel b, vector<Pixel>& result)
   vec4 step_pos3d = (b.pos3d - a.pos3d)/dx;
   float step_zinv = (b.zinv - a.zinv)/dx;
   float zinv = a.zinv; vec4 pos3d = a.pos3d;
+  vec2 step_uv = (b.uv - a.uv)/dx;
 
   int x = x0; int y = y0;
 
@@ -261,10 +272,14 @@ void Bresenham(Pixel a, Pixel b, vector<Pixel>& result)
       p = p + 2 * (dy - dx);
     }
     float fi = float(i);
+
     result[i].x = x;
     result[i].y = y;
     result[i].zinv = a.zinv + step_zinv*(fi);
     result[i].pos3d = a.pos3d+step_pos3d*(fi);
+    result[i].uv = a.uv + step_uv*(fi);
+    result[i].textured = a.textured;
+
     }
   }
 
@@ -429,7 +444,45 @@ int main( int argc, char* argv[] )
   // screen *screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN_MODE );
   screen *screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN_MODE );
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
-  LoadTestModel(triangles);
+
+  Mat image = imread("mario.jpg",CV_LOAD_IMAGE_COLOR);
+  cv::Size s = image.size();
+	int textureHeight = s.height;
+	int textureWidth = s.width;
+  for(size_t i = 0; i <= textureWidth; i++ )
+  {
+    for(size_t j = 0; j <= textureHeight; j++)
+    {
+      texture_array[i][j] = vec3(image.at<cv::Vec3b>(i,j)[2]/255.f,image.at<cv::Vec3b>(i,j)[1]/255.f,image.at<cv::Vec3b>(i,j)[0]/255.f);
+    }
+  }
+  std::cout << "Texture loaded" << '\n';
+
+  if (argc <= 1)
+  {
+     printf("Enter model to be loaded\n");
+     return 1;
+   }
+
+ else
+ {
+   if (std::string(argv[1]) == "test")
+   {
+     LoadTestModel(triangles);
+   }
+   else
+   {
+     if (!loadObj(std::string(argv[1]),triangles,white))
+     {
+       printf("Can't load file\n");
+       return 1;
+     }
+     std::cout << "Succesfully loaded model" << '\n';
+     std::cout << "Number of triangles" << triangles.size() << '\n';
+
+   }
+ }
+
 
   std::cout << "fov" <<  fov << '\n';
   std::cout << "Hnear" << Hnear << '\n';
@@ -452,73 +505,74 @@ int main( int argc, char* argv[] )
   return 0;
 }
 
-vec3 find_clipped_vertex(vec3 v1, vec3 v2, vec3 normal,vec3 point){
-  vec3 dir = normalize(v2-v1);
-  float denominator = glm::dot(normal,dir);
-  if (denominator != 0){
-    float t = (glm::dot(normal,point-v1 ));
-    return v1 + t * dir;
-  }
-  //else they are parallel
-  else return v2;
-}
-
-
-vector<Vertex> clip_vertices(vector<Vertex> &vertices,Camera camera )
-{
-  vector<Vertex> output = vertices;
-  for (size_t i = 0; i < 6; i++)
-  {
-      vector<Vertex> input = output;
-
-      output.clear();
-      Vertex startPoint = vertices.back();
-
-      for (endPoint : input)
-      {
-
-      float startPoint_in = (camera.clipingPlanes[i].normal.x * startPoint.position.x +
-        camera.clipingPlanes[i].normal.y * startPoint.position.y +
-        camera.clipingPlanes[i].normal.z * startPoint.position.z  -
-        glm::dot(camera.clipingPlanes[i].point, camera.clipingPlanes[i].normal) );
-
-      float endPoint_in = (camera.clipingPlanes[i].normal.x * endPoint.position.x +
-        camera.clipingPlanes[i].normal.y * endPoint.position.y +
-        camera.clipingPlanes[i].normal.z * endPoint.position.z  -
-        glm::dot(camera.clipingPlanes[i].point, camera.clipingPlanes[i].normal) );
-
-      if (startPoint_in >= 0 && endPoint_in >= 0)
-      {
-        output.push_back(endPoint);
-        break;
-      }
-
-      else if (startPoint_in >= 0 && endPoint_in < 0)
-      {
-        std::cout << "finding new vertex" << '\n';
-        vec3 new_v = find_clipped_vertex(vec3(startPoint.position),vec3(endPoint.position),camera.clipingPlanes[i].normal,camera.clipingPlanes[i].point);
-        Vertex new_vertex;
-        new_vertex.position = vec4(new_v,1.f);
-        output.push_back(new_vertex);
-      }
-
-      else if (endPoint_in >= 0 && startPoint_in < 0)
-      {
-        std::cout << "finding new vertex" << '\n';
-        vec3 new_v = find_clipped_vertex(vec3(endPoint.position),vec3(startPoint.position),camera.clipingPlanes[i].normal,camera.clipingPlanes[i].point);
-        Vertex new_vertex;
-        new_vertex.position = vec4(new_v,1.f);
-        output.push_back(new_vertex);
-        output.push_back(endPoint);
-      }
-      endPoint = startPoint;
-    }
-    if(output.size() == 0)
-      break;
-
-  }
-    return output;
-}
+//
+// vec3 find_clipped_vertex(vec3 v1, vec3 v2, vec3 normal,vec3 point){
+//   vec3 dir = normalize(v2-v1);
+//   float denominator = glm::dot(normal,dir);
+//   if (denominator != 0){
+//     float t = (glm::dot(normal,point-v1 ));
+//     return v1 + t * dir;
+//   }
+//   //else they are parallel
+//   else return v2;
+// }
+//
+//
+// vector<Vertex> clip_vertices(vector<Vertex> &vertices,Camera camera )
+// {
+//   vector<Vertex> output = vertices;
+//   for (size_t i = 0; i < 6; i++)
+//   {
+//       vector<Vertex> input = output;
+//
+//       output.clear();
+//       Vertex startPoint = vertices.back();
+//
+//       for (endPoint : input)
+//       {
+//
+//       float startPoint_in = (camera.clipingPlanes[i].normal.x * startPoint.position.x +
+//         camera.clipingPlanes[i].normal.y * startPoint.position.y +
+//         camera.clipingPlanes[i].normal.z * startPoint.position.z  -
+//         glm::dot(camera.clipingPlanes[i].point, camera.clipingPlanes[i].normal) );
+//
+//       float endPoint_in = (camera.clipingPlanes[i].normal.x * endPoint.position.x +
+//         camera.clipingPlanes[i].normal.y * endPoint.position.y +
+//         camera.clipingPlanes[i].normal.z * endPoint.position.z  -
+//         glm::dot(camera.clipingPlanes[i].point, camera.clipingPlanes[i].normal) );
+//
+//       if (startPoint_in >= 0 && endPoint_in >= 0)
+//       {
+//         output.push_back(endPoint);
+//         break;
+//       }
+//
+//       else if (startPoint_in >= 0 && endPoint_in < 0)
+//       {
+//         std::cout << "finding new vertex" << '\n';
+//         vec3 new_v = find_clipped_vertex(vec3(startPoint.position),vec3(endPoint.position),camera.clipingPlanes[i].normal,camera.clipingPlanes[i].point);
+//         Vertex new_vertex;
+//         new_vertex.position = vec4(new_v,1.f);
+//         output.push_back(new_vertex);
+//       }
+//
+//       else if (endPoint_in >= 0 && startPoint_in < 0)
+//       {
+//         std::cout << "finding new vertex" << '\n';
+//         vec3 new_v = find_clipped_vertex(vec3(endPoint.position),vec3(startPoint.position),camera.clipingPlanes[i].normal,camera.clipingPlanes[i].point);
+//         Vertex new_vertex;
+//         new_vertex.position = vec4(new_v,1.f);
+//         output.push_back(new_vertex);
+//         output.push_back(endPoint);
+//       }
+//       endPoint = startPoint;
+//     }
+//     if(output.size() == 0)
+//       break;
+//
+//   }
+//     return output;
+// }
 
 
 int clip_vertices(vector<Vertex> &vertices,Camera camera)
@@ -579,10 +633,13 @@ void Draw(screen* screen, Camera& camera )
   for( uint32_t i=0; i<triangles.size(); ++i ){
     vector<Vertex> vertices(3);
     initialize_vertices(vertices,triangles[i]);
-    int clip = clip_vertices(vertices,camera);
-    if (clip)
-    {
-      continue;
+    if (CLIPPING_ENABLED){
+
+      int clip = clip_vertices(vertices,camera);
+      if (clip)
+      {
+        continue;
+      }
     }
     vec3 currentColor = triangles[i].color;
     vec4 currentNormal = triangles[i].normal;
@@ -599,6 +656,8 @@ void VertexShader( const Vertex& v, Pixel& p, Camera& camera ){
   p.zinv = 1.f/pixel.z;
   p.z = pixel.z;
   p.pos3d = v.position*p.zinv;
+  p.uv = v.uv;
+  p.textured = v.textured;
 }
 
 
@@ -615,8 +674,11 @@ void PixelShader(const Pixel& p, screen* screen,Camera& camera, vec3 currentColo
      {
       directlight += directLight(i,currentNormal,p,camera, phong);
     }
-    vec3 illumination = currentColor * (directlight +  indirectLightPowerPerArea);
-    // vec3 illumination =(directlight );
+    vec3 illumination;
+    if (p.textured == 1) {
+      illumination = texture_array[int(p.uv.x)][int(p.uv.y)] * (directlight +  indirectLightPowerPerArea);
+    }
+    else illumination = currentColor * (directlight +  indirectLightPowerPerArea);
     AABuffer[x][y] = illumination;
   }
 }
@@ -630,8 +692,11 @@ void Interpolate( Pixel a, Pixel b, vector<Pixel>& result )
   float stepz = (b.zinv-a.zinv) / float(std::max(N-1,1)) ;
   vec3 step = vec3(stepx,stepy,stepz);
   vec4 step_pos3d = (b.pos3d - a.pos3d) / float(std::max(N-1,1)) ;
+  vec2 step_uv = (b.uv*b.zinv - a.uv*a.zinv) / float(std::max(N-1,1)) ;
+
   vec3 current = vec3(a.x,a.y,a.zinv);
   vec4 current_pos3d = a.pos3d;
+  vec2 current_uv = a.uv*a.zinv;
 
   for( int i=0; i<N; ++i )
   {
@@ -639,8 +704,13 @@ void Interpolate( Pixel a, Pixel b, vector<Pixel>& result )
     result[i].y = current.y;
     result[i].zinv = current.z;
     result[i].pos3d = current_pos3d;
+    result[i].uv = current_uv/result[i].zinv;
+    result[i].textured = a.textured;
+
     current += step;
     current_pos3d += step_pos3d;
+    current_uv += step_uv;
+
   }
 }
 
@@ -673,14 +743,24 @@ void Update(Camera& camera)
   /*Good idea to remove this*/
   std::cout << "Render time: " << dt << " ms." << std::endl;
   /* Update variables*/
-  int dx;
-  int dy;
-  SDL_GetRelativeMouseState( &dx, &dy );
+  int dx = 0;
+  int dy = 0;
+
   vec4 right(transformation_mat[0][0], transformation_mat[0][1], transformation_mat[0][2], 1 );
   vec4 down(transformation_mat[1][0], transformation_mat[1][1], transformation_mat[1][2], 1 );
   vec4 forward(transformation_mat[2][0], transformation_mat[2][1], transformation_mat[2][2], 1 );
 
   const uint8_t* keystate = SDL_GetKeyboardState(NULL);
+  SDL_GetRelativeMouseState( &dx, &dy );
+  std::cout << dx << dy << '\n';
+
+  camera.pitch -= dy/float(SCREEN_HEIGHT);
+  TransformationMatrix(transformation_mat,camera);
+
+  camera.pitch += dx/float(SCREEN_WIDTH);
+  TransformationMatrix(transformation_mat,camera);
+
+
   if(keystate[SDL_SCANCODE_UP])
   {
     camera.position.z += SENSITIVITY;
@@ -806,6 +886,14 @@ lights.push_back(light);
 void initialize_vertices( vector<Vertex>& vertices, Triangle triangle)
 {
   vertices[0].position = triangle.v0;
+  vertices[0].uv = triangle.uv0;
+  vertices[0].textured = triangle.textured;
+
   vertices[1].position = triangle.v1;
+  vertices[1].uv = triangle.uv1;
+  vertices[1].textured = triangle.textured;
+
   vertices[2].position = triangle.v2;
+  vertices[2].uv = triangle.uv2;
+  vertices[2].textured = triangle.textured;
 }

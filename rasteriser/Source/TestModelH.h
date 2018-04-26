@@ -11,7 +11,7 @@
 #include <fstream>
 #define DIF 0.7f
 #define SPC 0.f
-#define SPC1 5.f
+#define SPC1 555555555.f
 #define AMB 0.05f
 
 //
@@ -91,15 +91,21 @@ public:
 	glm::vec4 v0;
 	glm::vec4 v1;
 	glm::vec4 v2;
+
 	glm::vec4 normal;
 	glm::vec3 color;
 	Phong phong;
 	matType_t material;
+	int textured;
+
+	glm::vec2 uv0;
+	glm::vec2 uv1;
+	glm::vec2 uv2;
 
 	Triangle( glm::vec4 v0, glm::vec4 v1, glm::vec4 v2, glm::vec3 color,
-	float diffuse, float specular, float ambient, matType_t material )
-		: v0(v0), v1(v1), v2(v2), color(color),phong(diffuse, specular, ambient),
-		material(material)
+	float diffuse, float specular, float ambient, matType_t material,  glm::vec2 uv0, glm::vec2 uv1, glm::vec2 uv2, int textured )
+		: v0(v0), v1(v1), v2(v2), color(color),phong(diffuse, specular, ambient),uv0(uv0), uv1(uv1), uv2(uv2),
+		material(material), textured(textured)
 	{
 		ComputeNormal();
 	}
@@ -123,6 +129,11 @@ public:
 
 
 bool loadObj(std::string path, std::vector<Triangle>& triangles, glm::vec3 color ){
+	glm::vec2 tr = glm::vec2(0,255);
+	glm::vec2 tl = glm::vec2(0,0);
+	glm::vec2 bl = glm::vec2(255,0);
+	glm::vec2 br = glm::vec2(255,255);
+
 	glm::vec3 white(  0.75f, 0.75f, 0.75f );
 	glm::vec3 black(0,0,0);
 	glm::vec3 red(    0.75f, 0.15f, 0.15f );
@@ -190,7 +201,7 @@ bool loadObj(std::string path, std::vector<Triangle>& triangles, glm::vec3 color
 	}
 
 	for (unsigned int i = 0 ; i < faces.size(); i++){
-		triangles.push_back(Triangle(vertices[faces[i].x], vertices[faces[i].y], vertices[faces[i].z], offwhite, DIF,SPC,AMB,Diffuse ) );
+		triangles.push_back(Triangle(vertices[faces[i].x], vertices[faces[i].y], vertices[faces[i].z], offwhite, DIF,SPC,AMB,Diffuse,tr,tl,bl,0 ) );
 	}
 	return true;
 }
@@ -227,25 +238,30 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	vec4 G(L,L,L,1);
 	vec4 H(0,L,L,1);
 
+	glm::vec2 tl = glm::vec2(0,225);
+	glm::vec2 tr = glm::vec2(0,0);
+	glm::vec2 br = glm::vec2(225,0);
+	glm::vec2 bl = glm::vec2(225,225);
+
 	// Floor:
-	triangles.push_back( Triangle( C, B, A, white,DIF,10,AMB, Diffuse ) );
-	triangles.push_back( Triangle( C, D, B, white,DIF,10,AMB, Diffuse ) );
+	triangles.push_back( Triangle( C, B, A, white,DIF,SPC,AMB, Diffuse, tl,br,tr,0 ) );
+	triangles.push_back( Triangle( C, D, B, white,DIF,SPC,AMB, Diffuse, tl,br,tr,0 ) );
 
-	// Left wall
-	triangles.push_back( Triangle( A, E, C, red,DIF ,SPC,AMB, Diffuse) );
-	triangles.push_back( Triangle( C, E, G, red,DIF ,SPC,AMB, Diffuse) );
-
-	// Right wall
-	triangles.push_back( Triangle( F, B, D, green,DIF ,SPC,AMB, Diffuse) );
-	triangles.push_back( Triangle( H, F, D, green,DIF ,SPC,AMB, Diffuse) );
+	// // Left wall
+	triangles.push_back( Triangle( A, E, C, red,DIF ,SPC,AMB, Diffuse, tl,br,tr,0) );
+	triangles.push_back( Triangle( C, E, G, red,DIF ,SPC,AMB, Diffuse, tl,br,tr,0) );
+  //
+	// // Right wall
+	triangles.push_back( Triangle( F, B, D, green,DIF ,SPC,AMB, Diffuse, tl,br,tr,0) );
+	triangles.push_back( Triangle( H, F, D, green,DIF ,SPC,AMB, Diffuse, tl,br,tr,0) );
 
 	// Ceiling
-	triangles.push_back( Triangle( E, F, G, white,DIF,SPC,AMB, Diffuse) );
-	triangles.push_back( Triangle( F, H, G, white,DIF ,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle( E, F, G, white,DIF,SPC,AMB, Diffuse, tl,br,tr,0) );
+	triangles.push_back( Triangle( F, H, G, white,DIF ,SPC,AMB, Diffuse, tl,br,tr,0) );
 
 	// Back wall
-	triangles.push_back( Triangle( G, D, C, white,DIF,SPC,AMB, Diffuse) );
-	triangles.push_back( Triangle( G, H, D, white,DIF,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle( G, D, C, white,DIF,SPC,AMB, Diffuse, tl,br,tr,0) );
+	triangles.push_back( Triangle( G, H, D, white,DIF,SPC,AMB, Diffuse, tl,br,tr,0) );
 
 	// ---------------------------------------------------------------------------
 	// Short block
@@ -261,24 +277,24 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	H = vec4( 82,165,225,1);
 
 	// Front
-	triangles.push_back( Triangle(E,B,A,yellow, DIF,SPC1,AMB, Diffuse) );
-	triangles.push_back( Triangle(E,F,B,yellow,DIF,SPC1 ,AMB, Diffuse) );
+	triangles.push_back( Triangle(E,B,A,yellow, DIF,SPC1,AMB, Diffuse, tr,bl,br,1) );
+	triangles.push_back( Triangle(E,F,B,yellow,DIF,SPC1 ,AMB, Diffuse, tr,tl,bl,1) );
 
 	// Front
-	triangles.push_back( Triangle(F,D,B,yellow, DIF,SPC1,AMB, Diffuse) );
-	triangles.push_back( Triangle(F,H,D,yellow,DIF,SPC1,AMB, Diffuse) );
+	triangles.push_back( Triangle(F,D,B,yellow, DIF,SPC1,AMB, Diffuse, tl,br,tr,0) );
+	triangles.push_back( Triangle(F,H,D,yellow,DIF,SPC1,AMB, Diffuse, tl,br,tr,0) );
 
 	// BACK
-	triangles.push_back( Triangle(H,C,D,yellow,DIF,SPC,AMB, Diffuse) );
-	triangles.push_back( Triangle(H,G,C,yellow,DIF,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle(H,C,D,yellow,DIF,SPC,AMB, Diffuse, tl,br,tr,0) );
+	triangles.push_back( Triangle(H,G,C,yellow,DIF,SPC,AMB, Diffuse, tl,br,tr,0) );
 
 	// LEFT
-	triangles.push_back( Triangle(G,E,C,yellow,DIF,SPC,AMB, Diffuse) );
-	triangles.push_back( Triangle(E,A,C,yellow,DIF,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle(G,E,C,yellow,DIF,SPC,AMB, Diffuse, tl,br,tr,0) );
+	triangles.push_back( Triangle(E,A,C,yellow,DIF,SPC,AMB, Diffuse, tl,br,tr,0) );
 
 	// TOP
-	triangles.push_back( Triangle(G,F,E,yellow,DIF,SPC1,AMB, Diffuse) );
-	triangles.push_back( Triangle(G,H,F,yellow,DIF,SPC1,AMB, Diffuse) );
+	triangles.push_back( Triangle(G,F,E,yellow,DIF,SPC1,AMB, Diffuse, tl,br,tr,0) );
+	triangles.push_back( Triangle(G,H,F,yellow,DIF,SPC1,AMB, Diffuse, tl,br,tr,0) );
 
 	// ---------------------------------------------------------------------------
 	// Tall block
@@ -294,24 +310,24 @@ void LoadTestModel( std::vector<Triangle>& triangles )
 	H = vec4(314,330,456,1);
 
 	// Front
-	triangles.push_back( Triangle(E,B,A,blue,DIF,SPC,AMB, Diffuse) );
-	triangles.push_back( Triangle(E,F,B,blue,DIF,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle(E,B,A,blue,DIF,SPC1,AMB, Diffuse, tl,br,tr,0) );
+	triangles.push_back( Triangle(E,F,B,blue,DIF,SPC1,AMB, Diffuse, tl,br,tr,0) );
 
 	// Front
-	triangles.push_back( Triangle(F,D,B,blue,DIF,SPC,AMB, Diffuse) );
-	triangles.push_back( Triangle(F,H,D,blue,DIF,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle(F,D,B,blue,DIF,SPC1,AMB, Diffuse, tl,br,tr,0) );
+	triangles.push_back( Triangle(F,H,D,blue,DIF,SPC1,AMB, Diffuse, tl,br,tr,0) );
 
 	// BACK
-	triangles.push_back( Triangle(H,C,D,blue,DIF,SPC,AMB, Diffuse) );
-	triangles.push_back( Triangle(H,G,C,blue,DIF,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle(H,C,D,blue,DIF,SPC1,AMB, Diffuse, tl,br,tr,0) );
+	triangles.push_back( Triangle(H,G,C,blue,DIF,SPC1,AMB, Diffuse, tl,br,tr,0) );
 
 	// LEFT
-	triangles.push_back( Triangle(G,E,C,blue,DIF,SPC,AMB, Diffuse) );
-	triangles.push_back( Triangle(E,A,C,blue,DIF,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle(G,E,C,blue,DIF,SPC1,AMB, Diffuse, tl,br,tr,0) );
+	triangles.push_back( Triangle(E,A,C,blue,DIF,SPC1,AMB, Diffuse, tl,br,tr,0) );
 
 	// TOP
-	triangles.push_back( Triangle(G,F,E,blue,DIF,SPC,AMB, Diffuse) );
-	triangles.push_back( Triangle(G,H,F,blue,DIF,SPC,AMB, Diffuse) );
+	triangles.push_back( Triangle(G,F,E,blue,DIF,SPC1,AMB, Diffuse, tl,br,tr,0) );
+	triangles.push_back( Triangle(G,H,F,blue,DIF,SPC1,AMB, Diffuse, tl,br,tr,0) );
 
 
 	// ----------------------------------------------
