@@ -1,3 +1,4 @@
+#ifndef TEST_MODEL_CORNEL_BOX_H
 #define TEST_MODEL_CORNEL_BOX_H
 
 // Defines a simple test model: The Cornel Box
@@ -55,10 +56,11 @@ class Plane
 {
 public:
 	glm::vec3 normal;
+	glm::vec3 point;
 	float distance;
 
-	Plane(float normal, float distance)
-	: normal(normal), distance(distance) {}
+	Plane(glm::vec3 normal, glm::vec3 point)
+	: normal(normal), point(point) {}
 
 };
 
