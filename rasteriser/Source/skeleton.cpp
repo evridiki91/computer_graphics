@@ -31,16 +31,19 @@ using glm::mat4;
 #define AMBIENT_INTENSITY 0.1f
 #define SHINY_FACTOR 15.f
 #define INDIRECT_LIGHT_INTENSITY 0.3f
-#define NEAR 0.1f
-#define FAR 3.f
+#define NEAR 0.2f
+#define FAR 4.f
+#define ANG2RAD 3.14159/180.0
+float ratio = SCREEN_HEIGHT/SCREEN_WIDTH;
+
 //https://en.wikipedia.org/wiki/Angle_of_view#Measuring_a_camera's_field_of_view
 float fov = 2*atanf(SCREEN_HEIGHT/2*FOCAL_LENGTH);
-float ratio = SCREEN_HEIGHT/SCREEN_WIDTH;
-float Hnear = 2 * tan(fov / 2) * NEAR;
-float Wnear = Hnear * ratio;
-float Hfar = 2 * tan(fov / 2) * FAR;
-float Wfar = Hfar * ratio;
 
+float Hnear =  NEAR*tan(fov/2);
+float Wnear = Hnear*ratio;
+
+float Hfar = FAR*tan(fov/2);
+float Wfar = Hfar * ratio;
 
 struct Pixel
 {
@@ -57,7 +60,7 @@ struct Camera {
   float yaw; //angle for rotating around y-axis
   float pitch;
   float roll;
-  std::vector<Plane> cliipingPlanes;
+  std::vector<Plane> clipingPlanes;
 };
 
 
@@ -76,6 +79,7 @@ mat4 transformation_mat;
 vec3 indirectLightPowerPerArea = 0.5f*vec3( 1, 1, 1 );
 vector<Light> lights;
 int current_light_index;
+
 float dof = 3;
 int dof_enabled = false;
 
@@ -95,7 +99,7 @@ void DrawLineSDL( screen* screen, Pixel a, Pixel b, vec3 color );
 void DrawPolygonEdges( vector<Vertex>& vertices,screen* screen, Camera &camera );
 void PixelShader(const Pixel& p, screen* screen,Camera& camera, vec3 currentColor, vec4 currentNormal, Phong phong);
 void initialize_vertices( vector<Vertex>& vertices, Triangle triangle);
-void DrawPolygon(const vector<Vertex>& v;ertices, vec3 currentColor, vec4 normal,screen* screen, Camera& camera, Phong phong );
+void DrawPolygon(const vector<Vertex>& vertices, vec3 currentColor, vec4 normal,screen* screen, Camera& camera, Phong phong );
 void ComputePolygonRows(const vector<Pixel>& vertexPixels,vector<Pixel>& leftPixels,vector<Pixel>& rightPixels );
 void DrawPolygonRows( const vector<Pixel>& leftPixels,const vector<Pixel>& rightPixels
                 ,vec3 currentColor, vec4 normal, screen* screen, Camera& camera, Phong phong);
@@ -104,31 +108,46 @@ void DrawPolygonRows( const vector<Pixel>& leftPixels,const vector<Pixel>& right
 
 void make_frustum(Camera &camera)
 {
+  camera.clipingPlanes.clear();
+  camera.clipingPlanes.reserve(6);
 
-
-  vec3 right(transformation_mat[0][0], transformation_mat[0][1], transformation_mat[0][2] );
-  vec3 down(transformation_mat[1][0], transformation_mat[1][1], transformation_mat[1][2] );
-  vec3 forward(transformation_mat[2][0], transformation_mat[2][1], transformation_mat[2][2]);
+  //based on http://www.lighthouse3d.com/tutorials/view-frustum-culling/geometric-approach-extracting-the-planes/
+  vec3 right = glm::normalize(vec3(transformation_mat[0][0], transformation_mat[0][1], transformation_mat[0][2] ));
+  vec3 down = glm::normalize(vec3(transformation_mat[1][0], transformation_mat[1][1], transformation_mat[1][2] ));
+  vec3 forward = glm::normalize(vec3(transformation_mat[2][0], transformation_mat[2][1], transformation_mat[2][2]));
   vec3 up = -down;
 
-  vec3 far_center = camera.pos + forward*FAR;
+  vec3 camPos = vec3(camera.position);
 
-  vec3 far_top_left  = far_center + (up * Hfar/2) - (right * Wfar/2);
-  vec3 far_top_right = far_center + (up * Hfar/2) + (right * Wfar/2);
-  vec3 far_bot_left  = far_center - (up * Hfar/2) - (right * Wfar/2);
-  vec3 far_bot_right = far_center - (up * Hfar/2) + (right * Wfar/2);
+  vec3 far_center = camPos + forward*FAR;
+  vec3 near_center = camPos + forward*NEAR;
 
-  vec3 near_center = camera.pos + forward*NEAR;
+  vec3 temp = glm::normalize((near_center + right * Wnear) - camPos);
+  vec3 normalRight = glm::cross(up, temp);
 
-  vec3 near_top_left  = near_center + (up * Hnear/2) - (right * Wnear/2);
-  vec3 near_top_right = near_center + (up * Hnear/2) + (right * Wnear/2);
-  vec3 near_bot_left  = near_center - (up * Hnear/2) - (right * Wnear/2);
-  vec3 near_bot_right = near_center - (up * Hnear/2) + (right * Wnear/2);
+  temp =  glm::normalize((near_center - right * Wnear) - camPos);
+  vec3 normalLeft = glm::cross(temp,up);
+
+  temp = glm::normalize((near_center + down * Hnear) - camPos);
+  vec3 normalBot = glm::cross(right,temp);
+
+  temp = glm::normalize((near_center + up * Hnear ) - camPos);
+  vec3 normalTop = glm::cross(temp,right);
 
 
-  camera.cliipingPlanes.push_back()
+  //Far plane
+  camera.clipingPlanes.push_back(Plane(-forward,far_center));
+  //Near Plane
+  camera.clipingPlanes.push_back(Plane(forward,near_center));
+  //camera position lies on all other planes
+  camera.clipingPlanes.push_back(Plane(camPos,normalLeft));
+  camera.clipingPlanes.push_back(Plane(camPos,normalRight));
+  camera.clipingPlanes.push_back(Plane(camPos,normalTop));
+  camera.clipingPlanes.push_back(Plane(camPos,normalBot));
 
-
+  for (plane: camera.clipingPlanes ){
+    plane.distance = glm::dot(plane.point, plane.normal);
+  }
 }
 
 
@@ -400,6 +419,7 @@ void lookAtLight(Camera &camera)
   TransformationMatrix(transformation_mat,camera);
 }
 
+
 int main( int argc, char* argv[] )
 {
   initLights();
@@ -410,8 +430,16 @@ int main( int argc, char* argv[] )
   screen *screen = InitializeSDL( SCREEN_WIDTH, SCREEN_HEIGHT, FULLSCREEN_MODE );
   memset(screen->buffer, 0, screen->height*screen->width*sizeof(uint32_t));
   LoadTestModel(triangles);
-  lookAtLight(camera);
+
+  std::cout << "fov" <<  fov << '\n';
+  std::cout << "Hnear" << Hnear << '\n';
+  std::cout << "Wnear" << Wnear << '\n';
+  std::cout << "Hfar" << Hfar << '\n';
+  std::cout << "Wfar" << Wfar << '\n';
+  // return 0;
   while( NoQuitMessageSDL() ){
+      make_frustum(camera);
+
       Update(camera);
       SDL_Renderframe(screen);
       Draw(screen,camera);
@@ -421,6 +449,93 @@ int main( int argc, char* argv[] )
   }
   SDL_SaveImage( screen, "screenshot.bmp" );
   KillSDL(screen);
+  return 0;
+}
+
+vec3 find_clipped_vertex(vec3 v1, vec3 v2, vec3 normal,vec3 point){
+  vec3 dir = normalize(v2-v1);
+  float denominator = glm::dot(normal,dir);
+  if (denominator != 0){
+    float t = (glm::dot(normal,point-v1 ));
+    return v1 + t * dir;
+  }
+  //else they are parallel
+  else return v2;
+}
+
+
+vector<Vertex> clip_vertices(vector<Vertex> &vertices,Camera camera )
+{
+  vector<Vertex> output = vertices;
+  for (size_t i = 0; i < 6; i++)
+  {
+      vector<Vertex> input = output;
+
+      output.clear();
+      Vertex startPoint = vertices.back();
+
+      for (endPoint : input)
+      {
+
+      float startPoint_in = (camera.clipingPlanes[i].normal.x * startPoint.position.x +
+        camera.clipingPlanes[i].normal.y * startPoint.position.y +
+        camera.clipingPlanes[i].normal.z * startPoint.position.z  -
+        glm::dot(camera.clipingPlanes[i].point, camera.clipingPlanes[i].normal) );
+
+      float endPoint_in = (camera.clipingPlanes[i].normal.x * endPoint.position.x +
+        camera.clipingPlanes[i].normal.y * endPoint.position.y +
+        camera.clipingPlanes[i].normal.z * endPoint.position.z  -
+        glm::dot(camera.clipingPlanes[i].point, camera.clipingPlanes[i].normal) );
+
+      if (startPoint_in >= 0 && endPoint_in >= 0)
+      {
+        output.push_back(endPoint);
+        break;
+      }
+
+      else if (startPoint_in >= 0 && endPoint_in < 0)
+      {
+        std::cout << "finding new vertex" << '\n';
+        vec3 new_v = find_clipped_vertex(vec3(startPoint.position),vec3(endPoint.position),camera.clipingPlanes[i].normal,camera.clipingPlanes[i].point);
+        Vertex new_vertex;
+        new_vertex.position = vec4(new_v,1.f);
+        output.push_back(new_vertex);
+      }
+
+      else if (endPoint_in >= 0 && startPoint_in < 0)
+      {
+        std::cout << "finding new vertex" << '\n';
+        vec3 new_v = find_clipped_vertex(vec3(endPoint.position),vec3(startPoint.position),camera.clipingPlanes[i].normal,camera.clipingPlanes[i].point);
+        Vertex new_vertex;
+        new_vertex.position = vec4(new_v,1.f);
+        output.push_back(new_vertex);
+        output.push_back(endPoint);
+      }
+      endPoint = startPoint;
+    }
+    if(output.size() == 0)
+      break;
+
+  }
+    return output;
+}
+
+
+int clip_vertices(vector<Vertex> &vertices,Camera camera)
+{
+  for (size_t i = 0; i < 6; i++)
+  {
+    for (size_t j = 0; j < 3; j++) {
+
+      vec3 v = vec3(vertices[j].position);
+      if (glm::dot(camera.clipingPlanes[i].normal, v) -
+        camera.clipingPlanes[i].distance < -0.05)
+      {
+            std::cout << "Clipping" << '\n';
+            return 1;
+      }
+    }
+  }
   return 0;
 }
 
@@ -464,7 +579,11 @@ void Draw(screen* screen, Camera& camera )
   for( uint32_t i=0; i<triangles.size(); ++i ){
     vector<Vertex> vertices(3);
     initialize_vertices(vertices,triangles[i]);
-
+    int clip = clip_vertices(vertices,camera);
+    if (clip)
+    {
+      continue;
+    }
     vec3 currentColor = triangles[i].color;
     vec4 currentNormal = triangles[i].normal;
     Phong phong = triangles[i].phong;
@@ -580,7 +699,7 @@ void Update(Camera& camera)
   }
   else if(keystate[SDL_SCANCODE_LEFT])
   {
-    camera.pitch  += ROTATION_SENSITIVITY;
+    camera.yaw  += ROTATION_SENSITIVITY;
     TransformationMatrix(transformation_mat, camera);
   }
 
